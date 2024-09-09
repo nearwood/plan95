@@ -1,0 +1,16 @@
+{
+  "name": "scrum.lol-server",
+  "private": true,
+  "version": "0.0.0",
+  "main": "server.js",
+  "type": "module",
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "fastify": "^4.28.1",
+    "fastify-socket.io": "^5.1.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  }
+}
