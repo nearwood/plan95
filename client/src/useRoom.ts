@@ -11,7 +11,7 @@ export const enum WebsocketClientEvents {
   WS_LEAVEROOM = 'leaveRoom',
 };
 
-export const useRoom = (type: RoomType, name: string): Socket => {
+export const useRoom = (type: RoomType, name: string, username: string): Socket => {
   const { socket, rooms, updateRooms } = useSocket();
 
   const room = `${type}:${name}`;
@@ -24,7 +24,7 @@ export const useRoom = (type: RoomType, name: string): Socket => {
     /** Rejoin rooms after a reconnection */
     const rejoinRooms = (): void => {
       Object.keys(rooms).forEach((roomName) => {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName, username);
       });
     };
 
@@ -32,7 +32,7 @@ export const useRoom = (type: RoomType, name: string): Socket => {
     if (!rooms[room]) {
       rooms[room] = 1;
       if (socket.connected) {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, room);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, room, username);
       }
       socket.on('connect', rejoinRooms);
     } else {
@@ -44,7 +44,7 @@ export const useRoom = (type: RoomType, name: string): Socket => {
     return (): void => {
       // If this is the last hook using this room, leave the room
       if (rooms[room] <= 1) {
-        socket.emit(WebsocketClientEvents.WS_LEAVEROOM, room);
+        socket.emit(WebsocketClientEvents.WS_LEAVEROOM, room, username);
         delete rooms[room];
         socket.off('connect', rejoinRooms);
       } else {
@@ -57,4 +57,4 @@ export const useRoom = (type: RoomType, name: string): Socket => {
   return socket;
 };
 
-export const usePokerRoom = (roomId: string): Socket => useRoom(RoomType.POKER, roomId);
+export const usePokerRoom = (roomId: string, username): Socket => useRoom(RoomType.POKER, roomId, username);

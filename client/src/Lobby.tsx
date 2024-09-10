@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator } from 'react95';
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
 
-// TODO circa win95 exe/com/bat/virus names
-
 
 function Lobby() {
   const navigate = useNavigate();

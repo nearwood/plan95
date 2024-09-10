@@ -1,41 +1,50 @@
-import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator } from 'react95';
-
+import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator, TextInput, Avatar } from 'react95';
+import Cookies from 'js-cookie';
 
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 
+const colorFromChars = (str: string) => {
+  const hash = str.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+  const color = `hsl(${hash % 360}, 100%, 50%)`;
+  return color;
+}
 
 function Card({ name }: { name: string }) {
   return (
-    <div className='card'>
-      <div className='card-header'>
-        <span>{name}</span>
-      </div>
-      <div className='card-content'>
-        <span>blah</span>
-      </div>
-    </div>
+    <Avatar size={50} style={{ background: colorFromChars(name) }}>
+      {name}
+    </Avatar>
   );
 }
 
-//TODO lots of useCallbacks
 function PokerRoom() {
   const { roomId } = useParams();
-  const roomSocket = usePokerRoom(roomId || '');
+  const savedUsername = Cookies.get('username', { path: `poker/${roomId}` }) || '';
+  const roomSocket = usePokerRoom(roomId || '', savedUsername);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
-  const [userCount, setUserCount] = useState(1);
+  const [userData, setUserData] = useState(null);
+  const [username, setUsername] = useState(savedUsername);
   const navigate = useNavigate();
 
-  const roomJoined = useCallback((id: string) => {
-    console.log('roomJoined', id);
-    setUserCount(userCount + 1);
-  }, [userCount]);
+  const numUsers = Object.keys(userData || {}).length;
 
-  const roomLeft = useCallback((id: string) => {
-    console.log('roomLeft', id);
-    setUserCount(userCount - 1);
-  }, [userCount]);
+  const setUsernameCallback = useCallback((e) => {
+    const name = e.target.value;
+    setUsername(name);
+    Cookies.set('username', name, { path: `poker/${roomId}` });
+  }, [roomId]);
+
+  const roomJoined = useCallback((data: any) => {
+    console.log('roomJoined', data);
+    setUserData(data);
+  }, []);
+
+  const roomLeft = useCallback((data: any) => {
+    console.log('roomLeft', data);
+    setUserData(data);
+  }, []);
 
   useEffect(() => {
     roomSocket?.on('roomJoined', roomJoined);
@@ -45,7 +54,7 @@ function PokerRoom() {
       roomSocket?.off('roomJoined', roomJoined);
       roomSocket?.off('roomLeft', roomLeft);
     };
-  }, [roomJoined, roomLeft, roomSocket, userCount]);
+  }, [roomJoined, roomLeft, roomSocket]);
 
   function goToLobby() {
     navigate('/');
@@ -87,11 +96,16 @@ function PokerRoom() {
     </Toolbar>
     <WindowContent className='windowContent pokerWindow'>
       <p>
-        Poker Room
+        My name: <TextInput value={username} onChange={setUsernameCallback} />
       </p>
+      <div className='userList'>
+        {Object.entries(userData || {}).map(([key, user]) => (
+          <Card key={key} name={user.name} />
+        ))}
+      </div>
     </WindowContent>
     <Frame variant='well' className='footer'>
-      <span>Users: {userCount}</span>
+      <span>Users: {numUsers}</span>
     </Frame>
   </>
   );

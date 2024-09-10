@@ -17,6 +17,8 @@ const fastify = Fastify({
 //   fastify.io.emit("hello");
 // });
 
+const userData = {};
+
 fastify.ready().then(() => {
   fastify.io.on("connection", (socket) => {
     console.info('Socket connected', socket.id);
@@ -31,23 +33,36 @@ fastify.ready().then(() => {
 
     socket.on("disconnecting", (reason) => {
       console.info('Socket disconnecting', reason);
+
       for (const room of socket.rooms) {
         if (room !== socket.id) {
-          socket.to(room).emit("roomLeft", socket.id);
+          userData[room] = userData[room] || {};
+          delete userData[room][socket.id];
+          socket.to(room).emit("roomLeft", userData[room]);
         }
       }
     });
   
-    socket.on("joinRoom", (room) => {
-      console.info('socket wants room:', room);
+    socket.on("joinRoom", (room, username) => {
+      // TODO create room on server
+      console.info(`user ${username} wants room: ${room}`);
       socket.join(room);
-      socket.to(room).emit("roomJoined", socket.id);
+      userData[room] = userData[room] || {};
+      userData[room][socket.id] = {
+        name: username,
+      };
+      fastify.io.to(socket.id).emit("roomJoined", userData[room]);
+      socket.to(room).emit("roomJoined", userData[room]);
+      console.log(`${Object.keys(userData[room]).length} users in ${room}`);
     });
 
     socket.on("leaveRoom", (room) => {
       console.info('socket leaving room:', room);
-      socket.to(room).emit("roomLeft", socket.id);
       socket.leave(room);
+      userData[room] = userData[room] || {};
+      delete userData[room][socket.id];
+      socket.to(room).emit("roomLeft", userData[room]);
+      console.log(`${Object.keys(userData[room]).length} users in ${room}`);
     });
   });
 });
