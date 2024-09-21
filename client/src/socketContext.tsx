@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-let socket: Socket;
+let socket: Socket | null = null;
 const rooms = {};
 const host = 'ws://localhost:3218';
 
@@ -10,7 +11,7 @@ export interface RoomReference {
 }
 
 export interface SocketIOContext {
-  socket: Socket;
+  socket: Socket | null;
   rooms: RoomReference;
   updateRooms: (rooms: RoomReference) => void;
 }
@@ -46,7 +47,7 @@ export const SocketProvider: React.FC<Props> = ({ children }) => {
 
     setSocketState(socket);
     socket.on('connect', () => {
-      console.debug(`SocketIO connected: ${socket.id}`);
+      console.debug(`SocketIO connected: ${socket!.id}`);
     });
 
     socket.on('disconnect', () => {
@@ -55,7 +56,7 @@ export const SocketProvider: React.FC<Props> = ({ children }) => {
 
     // Sent any valid 'dispatch' event through redux.
     socket.onAny((event, type, data) => {
-      console.debug(`Socket ${socket.id} got event: ${event} with type: ${type} and data: ${data}`);
+      console.debug(`Socket ${socket!.id} got event: ${event} with type: ${type} and data: ${data}`);
     });
   }, []);
 

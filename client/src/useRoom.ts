@@ -11,10 +11,15 @@ export const enum WebsocketClientEvents {
   WS_LEAVEROOM = 'leaveRoom',
 };
 
-export const useRoom = (type: RoomType, name: string, username: string): Socket => {
+export interface RoomHookResponse {
+  socket: Socket;
+  roomId: string;
+}
+
+export const useRoom = (type: RoomType, name: string, username: string): RoomHookResponse => {
   const { socket, rooms, updateRooms } = useSocket();
 
-  const room = `${type}:${name}`;
+  const roomId = `${type}:${name}`;
 
   useEffect(() => {
     if (!socket) {
@@ -29,32 +34,32 @@ export const useRoom = (type: RoomType, name: string, username: string): Socket 
     };
 
     // If this is the first time using this room, setup event listeners
-    if (!rooms[room]) {
-      rooms[room] = 1;
+    if (!rooms[roomId]) {
+      rooms[roomId] = 1;
       if (socket.connected) {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, room, username);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomId, username);
       }
       socket.on('connect', rejoinRooms);
     } else {
-      rooms[room] += 1;
+      rooms[roomId] += 1;
     }
 
     updateRooms(rooms);
 
     return (): void => {
       // If this is the last hook using this room, leave the room
-      if (rooms[room] <= 1) {
-        socket.emit(WebsocketClientEvents.WS_LEAVEROOM, room, username);
-        delete rooms[room];
+      if (rooms[roomId] <= 1) {
+        socket.emit(WebsocketClientEvents.WS_LEAVEROOM, roomId, username);
+        delete rooms[roomId];
         socket.off('connect', rejoinRooms);
       } else {
-        rooms[room] -= 1;
+        rooms[roomId] -= 1;
       }
       updateRooms(rooms);
     };
-  }, [name, room, rooms, socket, type, updateRooms]);
+  }, [name, roomId, rooms, socket, type, updateRooms, username]);
 
-  return socket;
+  return { socket, roomId };
 };
 
-export const usePokerRoom = (roomId: string, username): Socket => useRoom(RoomType.POKER, roomId, username);
+export const usePokerRoom = (roomId: string, username: string): RoomHookResponse => useRoom(RoomType.POKER, roomId, username);

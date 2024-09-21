@@ -21,7 +21,7 @@ const router = createBrowserRouter([
         element: <Lobby />,
       },
       {
-        path: "poker/:roomId",
+        path: "poker/:roomName",
         element: <PokerRoom />,
       }
     ]

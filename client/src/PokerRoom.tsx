@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator, TextInput, Avatar } from 'react95';
 import Cookies from 'js-cookie';
 
@@ -20,9 +21,9 @@ function Card({ name }: { name: string }) {
 }
 
 function PokerRoom() {
-  const { roomId } = useParams();
-  const savedUsername = Cookies.get('username', { path: `poker/${roomId}` }) || '';
-  const roomSocket = usePokerRoom(roomId || '', savedUsername);
+  const { roomName } = useParams();
+  const savedUsername = Cookies.get('username') || '';
+  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', savedUsername);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState(null);
   const [username, setUsername] = useState(savedUsername);
@@ -30,31 +31,25 @@ function PokerRoom() {
 
   const numUsers = Object.keys(userData || {}).length;
 
-  const setUsernameCallback = useCallback((e) => {
+  const setUsernameCallback = useCallback((e: any) => {
     const name = e.target.value;
     setUsername(name);
-    Cookies.set('username', name, { path: `poker/${roomId}` });
-  }, [roomId]);
+    Cookies.set('username', name, { path: `poker/${roomName}` });
+    roomSocket.emit('updateUser', roomId, { name });
+  }, [roomId, roomName, roomSocket]);
 
-  const roomJoined = useCallback((data: any) => {
-    console.log('roomJoined', data);
-    setUserData(data);
-  }, []);
-
-  const roomLeft = useCallback((data: any) => {
-    console.log('roomLeft', data);
+  const roomUpdate = useCallback((data: any) => {
+    console.log('roomUpdate', data);
     setUserData(data);
   }, []);
 
   useEffect(() => {
-    roomSocket?.on('roomJoined', roomJoined);
-    roomSocket?.on('roomLeft', roomLeft);
+    roomSocket?.on('roomUpdate', roomUpdate);
 
     return () => {
-      roomSocket?.off('roomJoined', roomJoined);
-      roomSocket?.off('roomLeft', roomLeft);
+      roomSocket?.off('roomUpdate', roomUpdate);
     };
-  }, [roomJoined, roomLeft, roomSocket]);
+  }, [roomSocket, roomUpdate]);
 
   function goToLobby() {
     navigate('/');

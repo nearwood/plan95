@@ -51,8 +51,8 @@ fastify.ready().then(() => {
       userData[room][socket.id] = {
         name: username,
       };
-      fastify.io.to(socket.id).emit("roomJoined", userData[room]);
-      socket.to(room).emit("roomJoined", userData[room]);
+      fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
+      socket.to(room).emit("roomUpdate", userData[room]);
       console.log(`${Object.keys(userData[room]).length} users in ${room}`);
     });
 
@@ -61,8 +61,23 @@ fastify.ready().then(() => {
       socket.leave(room);
       userData[room] = userData[room] || {};
       delete userData[room][socket.id];
-      socket.to(room).emit("roomLeft", userData[room]);
+      socket.to(room).emit("roomUpdate", userData[room]);
       console.log(`${Object.keys(userData[room]).length} users in ${room}`);
+    });
+
+    socket.on("updateUser", (room, data) => {
+      console.info('updateUser', room, data);
+      // TODO verify room
+      userData[room] = userData[room] || {};
+
+      // TODO verify data
+      userData[room][socket.id] = {
+        ...userData[room][socket.id],
+        ...data,
+      };
+
+      fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
+      socket.to(room).emit("roomUpdate", userData[room]);
     });
   });
 });
