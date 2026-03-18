@@ -7,17 +7,21 @@ const fastify = Fastify({
 }).register(fastifyIO, {
   serveClient: false,
   cors: {
-    origin: '*' //"http://localhost:5173"
+    origin: '*'
   }
 }).register(cors, {
   origin: '*'
 });
 
-// fastify.get('/', async function handler (request, reply) {
-//   fastify.io.emit("hello");
-// });
-
 const userData = {};
+const roomState = {};
+
+function getRoom(room) {
+  if (!roomState[room]) {
+    roomState[room] = { phase: 'voting', votes: {} };
+  }
+  return roomState[room];
+}
 
 fastify.ready().then(() => {
   fastify.io.on("connection", (socket) => {
@@ -38,46 +42,77 @@ fastify.ready().then(() => {
         if (room !== socket.id) {
           userData[room] = userData[room] || {};
           delete userData[room][socket.id];
-          socket.to(room).emit("roomLeft", userData[room]);
+          socket.to(room).emit("roomUpdate", userData[room]);
+
+          const state = getRoom(room);
+          delete state.votes[socket.id];
+          socket.to(room).emit("roomState", state);
         }
       }
     });
-  
+
     socket.on("joinRoom", (room, username) => {
-      // TODO create room on server
       console.info(`user ${username} wants room: ${room}`);
       socket.join(room);
+
       userData[room] = userData[room] || {};
-      userData[room][socket.id] = {
-        name: username,
-      };
+      userData[room][socket.id] = { name: username };
       fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
       socket.to(room).emit("roomUpdate", userData[room]);
+
+      const state = getRoom(room);
+      state.votes[socket.id] = null;
+      fastify.io.to(socket.id).emit("roomState", state);
+      socket.to(room).emit("roomState", state);
+
       console.log(`${Object.keys(userData[room]).length} users in ${room}`);
     });
 
     socket.on("leaveRoom", (room) => {
       console.info('socket leaving room:', room);
       socket.leave(room);
+
       userData[room] = userData[room] || {};
       delete userData[room][socket.id];
       socket.to(room).emit("roomUpdate", userData[room]);
+
+      const state = getRoom(room);
+      delete state.votes[socket.id];
+      socket.to(room).emit("roomState", state);
+
       console.log(`${Object.keys(userData[room]).length} users in ${room}`);
     });
 
     socket.on("updateUser", (room, data) => {
       console.info('updateUser', room, data);
-      // TODO verify room
       userData[room] = userData[room] || {};
-
-      // TODO verify data
       userData[room][socket.id] = {
         ...userData[room][socket.id],
         ...data,
       };
-
       fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
       socket.to(room).emit("roomUpdate", userData[room]);
+    });
+
+    socket.on("castVote", (room, value) => {
+      const state = getRoom(room);
+      state.votes[socket.id] = value;
+      fastify.io.to(room).emit("roomState", state);
+    });
+
+    socket.on("revealVotes", (room) => {
+      const state = getRoom(room);
+      state.phase = 'revealed';
+      fastify.io.to(room).emit("roomState", state);
+    });
+
+    socket.on("resetVotes", (room) => {
+      const state = getRoom(room);
+      state.phase = 'voting';
+      Object.keys(state.votes).forEach(id => {
+        state.votes[id] = null;
+      });
+      fastify.io.to(room).emit("roomState", state);
     });
   });
 });

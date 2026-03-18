@@ -4,7 +4,7 @@ import { io, Socket } from 'socket.io-client';
 
 let socket: Socket | null = null;
 const rooms = {};
-const host = 'ws://localhost:3218';
+const host = import.meta.env.VITE_SERVER_URL || 'ws://localhost:3218';
 
 export interface RoomReference {
   [key: string]: number;
