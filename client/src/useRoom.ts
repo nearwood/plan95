@@ -12,7 +12,7 @@ export const enum WebsocketClientEvents {
 };
 
 export interface RoomHookResponse {
-  socket: Socket;
+  socket: Socket | null;
   roomId: string;
 }
 
