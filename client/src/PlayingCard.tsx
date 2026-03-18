@@ -1,4 +1,6 @@
 import React from 'react';
+import cardBack from '/cardback.png';
+import cardFaces from '/win95cards.png';
 
 const CARD_W = 71;
 const CARD_H = 96;
@@ -53,7 +55,7 @@ export function PlayingCard({ value, faceDown = false, selected = false, onClick
         onClick={onClick}
         style={{
           ...baseStyle,
-          backgroundImage: 'url(/cardback.png)',
+          backgroundImage: `url(${cardBack})`,
         }}
       />
     );
@@ -65,7 +67,7 @@ export function PlayingCard({ value, faceDown = false, selected = false, onClick
       onClick={onClick}
       style={{
         ...baseStyle,
-        backgroundImage: 'url(/win95cards.png)',
+        backgroundImage: `url(${cardFaces})`,
         backgroundPosition: `-${col * CARD_W}px -${row * CARD_H}px`,
       }}
     />
