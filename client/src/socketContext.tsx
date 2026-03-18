@@ -13,6 +13,7 @@ export interface RoomReference {
 
 export interface SocketIOContext {
   socket: Socket | null;
+  connected: boolean;
   rooms: RoomReference;
   updateRooms: (rooms: RoomReference) => void;
 }
@@ -22,7 +23,7 @@ export interface Props {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const SocketContext = createContext<SocketIOContext>({ socket, rooms, updateRooms: (_newRooms: RoomReference) => { } });
+const SocketContext = createContext<SocketIOContext>({ socket, connected: false, rooms, updateRooms: (_newRooms: RoomReference) => { } });
 SocketContext.displayName = 'SocketContext';
 export { SocketContext };
 
@@ -30,13 +31,15 @@ export const useSocket = (): SocketIOContext => useContext(SocketContext);
 
 export const SocketProvider: React.FC<Props> = ({ children }) => {
   const [socketState, setSocketState] = useState(socket);
+  const [connected, setConnected] = useState(false);
   const [roomsState, setRoomState] = useState({});
 
   const updateRooms = useCallback((newRooms: any) => {
     setRoomState(newRooms);
   }, []);
 
-  const socketContext = useMemo(() => ({ socket: socketState, rooms: roomsState, updateRooms }), [socketState, roomsState, updateRooms]);
+  const socketContext = useMemo(() => ({ socket: socketState, connected, rooms: roomsState, updateRooms }), [socketState, connected, roomsState, updateRooms]);
+
   useEffect(() => {
     if (socket) {
       socket.disconnect();
@@ -47,15 +50,17 @@ export const SocketProvider: React.FC<Props> = ({ children }) => {
     });
 
     setSocketState(socket);
+
     socket.on('connect', () => {
       console.debug(`SocketIO connected: ${socket!.id}`);
+      setConnected(true);
     });
 
     socket.on('disconnect', () => {
       console.debug('SocketIO disconnected');
+      setConnected(false);
     });
 
-    // Sent any valid 'dispatch' event through redux.
     socket.onAny((event, type, data) => {
       console.debug(`Socket ${socket!.id} got event: ${event} with type: ${type} and data: ${data}`);
     });

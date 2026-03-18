@@ -3,6 +3,7 @@ import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuList
 import Cookies from 'js-cookie';
 
 import { usePokerRoom } from './useRoom';
+import { useSocket } from './socketContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { PlayingCard } from './PlayingCard';
@@ -21,6 +22,7 @@ function PokerRoom() {
   const { roomName } = useParams();
   const savedUsername = Cookies.get('username') || '';
   const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', savedUsername);
+  const { connected } = useSocket();
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState<UserData>({});
   const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {} });
@@ -160,10 +162,10 @@ function PokerRoom() {
       )}
     </WindowContent>
     <Frame variant='well' className='footer'>
-      <span>Users: {numUsers}</span>
-      {roomState.phase === 'voting' && numUsers > 0 && votedCount === numUsers && (
-        <span> · All voted!</span>
-      )}
+      {connected
+        ? <><span>Users: {numUsers}</span>{roomState.phase === 'voting' && numUsers > 0 && votedCount === numUsers && <span> · All voted!</span>}</>
+        : <span>Connecting...</span>
+      }
     </Frame>
   </>);
 }

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator } from 'react95';
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
+import { useSocket } from './socketContext';
 
 
 function Lobby() {
   const navigate = useNavigate();
+  const { connected } = useSocket();
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   function createRoom() {
@@ -52,7 +54,7 @@ function Lobby() {
       <Button onClick={createRoom}>Create Room</Button>
     </WindowContent>
     <Frame variant='well' className='footer'>
-      <span>@nearwood</span>
+      <span>{connected ? '@nearwood' : 'Connecting...'}</span>
     </Frame>
   </>
   );
