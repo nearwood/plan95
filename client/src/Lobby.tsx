@@ -19,7 +19,7 @@ function Lobby() {
 
   return (<>
     <WindowHeader className='window-title'>
-      <span>Planning Poker - scrum.lol</span>
+      <span>Planning Poker - plan95</span>
     </WindowHeader>
     <Toolbar className='toolbar'>
       <Button variant='menu' size='sm'>

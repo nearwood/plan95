@@ -11,6 +11,12 @@ import App from './App.tsx';
 import PokerRoom from './PokerRoom.tsx';
 import Lobby from './Lobby.tsx';
 
+// Handle GitHub Pages 404 redirect
+const redirectPath = new URLSearchParams(window.location.search).get('p');
+if (redirectPath) {
+  window.history.replaceState(null, '', redirectPath);
+}
+
 const router = createBrowserRouter([
   {
     path: "/",

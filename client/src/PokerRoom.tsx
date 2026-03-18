@@ -78,7 +78,7 @@ function PokerRoom() {
 
   return (<>
     <WindowHeader className='window-title'>
-      <span>{roomId} - Planning Poker - scrum.lol</span>
+      <span>{roomId} - Planning Poker - plan95</span>
       <Button onClick={goToLobby}>
         <span className='close-icon' />
       </Button>
