@@ -47,6 +47,7 @@ export const SocketProvider: React.FC<Props> = ({ children }) => {
 
     socket = io(host, {
       transports: ['websocket'],
+      withCredentials: true,
     });
 
     setSocketState(socket);

@@ -1,15 +1,14 @@
 import { styleReset, Window } from 'react95';
 import { createGlobalStyle, ThemeProvider } from 'styled-components';
 
-/* Pick a theme of your choice */
 import original from 'react95/dist/themes/original';
 import './App.css'
 
-/* Original Windows95 font (optional) */
 import ms_sans_serif from 'react95/dist/fonts/ms_sans_serif.woff2';
 import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 import { Outlet } from 'react-router-dom';
-// import { useOnlineStatus } from './useOnlineStatus';
+import { useAuth } from './useAuth';
+import LoginScreen from './LoginScreen';
 
 const GlobalStyles = createGlobalStyle`
   ${styleReset}
@@ -27,16 +26,20 @@ const GlobalStyles = createGlobalStyle`
   }
 `;
 
-
 function App() {
-  // const isOnline = useOnlineStatus();
+  const { user, loading, login, logout } = useAuth();
 
   return (
     <>
       <GlobalStyles />
       <ThemeProvider theme={original}>
         <Window className='window'>
-          <Outlet />
+          {loading
+            ? null
+            : user
+              ? <Outlet context={{ user, logout }} />
+              : <LoginScreen onLogin={login} />
+          }
         </Window>
       </ThemeProvider>
     </>

@@ -1,17 +1,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator, TextInput } from 'react95';
-import Cookies from 'js-cookie';
 
 import { usePokerRoom } from './useRoom';
-import { useSocket } from './socketContext';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { PlayingCard } from './PlayingCard';
 import { POKER_VALUES } from './pokerValues';
+import { useSocket } from './socketContext';
+import type { User } from './useAuth';
+
+interface JiraIssue {
+  key: string;
+  summary: string;
+  description: string | null;
+}
 
 interface RoomState {
   phase: 'voting' | 'revealed';
   votes: Record<string, string | null>;
+  issue: JiraIssue | null;
 }
 
 interface UserData {
@@ -20,13 +27,14 @@ interface UserData {
 
 function PokerRoom() {
   const { roomName } = useParams();
-  const savedUsername = Cookies.get('username') || '';
-  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', savedUsername);
+  const { user, logout } = useOutletContext<{ user: User; logout: () => void }>();
+  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name);
   const { connected } = useSocket();
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState<UserData>({});
-  const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {} });
-  const [username, setUsername] = useState(savedUsername);
+  const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {}, issue: null });
+  const [issueInput, setIssueInput] = useState('');
+  const [issueError, setIssueError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const numUsers = Object.keys(userData).length;
@@ -43,13 +51,6 @@ function PokerRoom() {
     ? (numericVotes.reduce((a, b) => a + b, 0) / numericVotes.length).toFixed(1)
     : null;
 
-  const setUsernameCallback = useCallback((e: any) => {
-    const name = e.target.value;
-    setUsername(name);
-    Cookies.set('username', name, { path: `poker/${roomName}` });
-    roomSocket?.emit('updateUser', roomId, { name });
-  }, [roomId, roomName, roomSocket]);
-
   const handleRoomUpdate = useCallback((data: UserData) => {
     setUserData(data);
   }, []);
@@ -61,9 +62,11 @@ function PokerRoom() {
   useEffect(() => {
     roomSocket?.on('roomUpdate', handleRoomUpdate);
     roomSocket?.on('roomState', handleRoomState);
+    roomSocket?.on('issueError', (msg: string) => setIssueError(msg));
     return () => {
       roomSocket?.off('roomUpdate', handleRoomUpdate);
       roomSocket?.off('roomState', handleRoomState);
+      roomSocket?.off('issueError');
     };
   }, [roomSocket, handleRoomUpdate, handleRoomState]);
 
@@ -74,6 +77,11 @@ function PokerRoom() {
 
   const revealVotes = () => roomSocket?.emit('revealVotes', roomId);
   const resetVotes = () => roomSocket?.emit('resetVotes', roomId);
+
+  const loadIssue = () => {
+    setIssueError(null);
+    roomSocket?.emit('loadIssue', roomId, issueInput);
+  };
 
   function goToLobby() {
     navigate('/');
@@ -104,9 +112,31 @@ function PokerRoom() {
       </Button>
     </Toolbar>
     <WindowContent className='windowContent pokerWindow'>
-      <p style={{ margin: '0 0 12px' }}>
-        My name: <TextInput value={username} onChange={setUsernameCallback} />
-      </p>
+
+      {/* Issue loader */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+        <TextInput
+          value={issueInput}
+          onChange={(e: any) => setIssueInput(e.target.value)}
+          onKeyDown={(e: any) => e.key === 'Enter' && loadIssue()}
+          placeholder='PROJ-123 or Jira URL'
+          style={{ flex: 1 }}
+        />
+        <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
+      </div>
+
+      {/* Issue display */}
+      {roomState.issue && (
+        <div style={{ marginBottom: 12, padding: 8, background: 'rgba(0,0,0,0.15)', color: '#fff' }}>
+          <strong style={{ textShadow: '1px 1px 0 #000' }}>{roomState.issue.key}: {roomState.issue.summary}</strong>
+          {roomState.issue.description && (
+            <p style={{ margin: '4px 0 0', fontSize: 12, textShadow: '1px 1px 0 #000', opacity: 0.9 }}>
+              {roomState.issue.description}
+            </p>
+          )}
+        </div>
+      )}
+      {issueError && <p style={{ color: '#ff4444', margin: '0 0 8px', fontSize: 12 }}>{issueError}</p>}
 
       {/* Player cards */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
@@ -166,6 +196,7 @@ function PokerRoom() {
         ? <><span>Users: {numUsers}</span>{roomState.phase === 'voting' && numUsers > 0 && votedCount === numUsers && <span> · All voted!</span>}</>
         : <span>Connecting...</span>
       }
+      <Button size='sm' style={{ marginLeft: 'auto' }} onClick={logout}>{user.name}</Button>
     </Frame>
   </>);
 }
