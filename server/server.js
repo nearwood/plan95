@@ -2,15 +2,17 @@ import Fastify from 'fastify';
 import fastifyIO from "fastify-socket.io";
 import cors from '@fastify/cors';
 
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
+
 const fastify = Fastify({
   logger: true
 }).register(fastifyIO, {
   serveClient: false,
   cors: {
-    origin: '*'
+    origin: ALLOWED_ORIGIN
   }
 }).register(cors, {
-  origin: '*'
+  origin: ALLOWED_ORIGIN
 });
 
 const userData = {};
