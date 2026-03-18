@@ -12,6 +12,7 @@ jobs:
   deploy-server:
     name: Deploy server to Cloud Run
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: read
       id-token: write
