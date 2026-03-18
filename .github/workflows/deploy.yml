@@ -43,7 +43,8 @@ jobs:
           flags: >
             --allow-unauthenticated
             --session-affinity
-            --min-instances=1
+            --min-instances=0
+            --max-instances=1
 
   deploy-client:
     name: Deploy client to GitHub Pages
