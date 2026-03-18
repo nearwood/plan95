@@ -21,7 +21,7 @@ export interface Props {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const SocketContext = createContext({ socket, rooms, updateRooms: (_newRooms: RoomReference) => { } });
+const SocketContext = createContext<SocketIOContext>({ socket, rooms, updateRooms: (_newRooms: RoomReference) => { } });
 SocketContext.displayName = 'SocketContext';
 export { SocketContext };
 
