@@ -5,7 +5,8 @@ import Cookies from 'js-cookie';
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
-import { PlayingCard, POKER_VALUES } from './PlayingCard';
+import { PlayingCard } from './PlayingCard';
+import { POKER_VALUES } from './pokerValues';
 
 interface RoomState {
   phase: 'voting' | 'revealed';
@@ -44,7 +45,7 @@ function PokerRoom() {
     const name = e.target.value;
     setUsername(name);
     Cookies.set('username', name, { path: `poker/${roomName}` });
-    roomSocket.emit('updateUser', roomId, { name });
+    roomSocket?.emit('updateUser', roomId, { name });
   }, [roomId, roomName, roomSocket]);
 
   const handleRoomUpdate = useCallback((data: UserData) => {
@@ -66,11 +67,11 @@ function PokerRoom() {
 
   const castVote = (value: string) => {
     const newValue = myVote === value ? null : value;
-    roomSocket.emit('castVote', roomId, newValue);
+    roomSocket?.emit('castVote', roomId, newValue);
   };
 
-  const revealVotes = () => roomSocket.emit('revealVotes', roomId);
-  const resetVotes = () => roomSocket.emit('resetVotes', roomId);
+  const revealVotes = () => roomSocket?.emit('revealVotes', roomId);
+  const resetVotes = () => roomSocket?.emit('resetVotes', roomId);
 
   function goToLobby() {
     navigate('/');

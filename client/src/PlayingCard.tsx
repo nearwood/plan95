@@ -15,8 +15,6 @@ const POKER_CARD_MAP: Record<string, [number, number]> = {
   '☕': [0, 11],  // Queen of Hearts
 };
 
-export const POKER_VALUES = ['1', '2', '3', '5', '8', '13', '?', '☕'];
-
 interface PlayingCardProps {
   value?: string;
   faceDown?: boolean;
