@@ -103,8 +103,8 @@ fastify.get('/auth/callback', async (req, reply) => {
     .setCookie('session', sessionId, {
       path: '/',
       httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      secure: true,
       maxAge: 60 * 60 * 8, // 8 hours
     })
     .redirect(APP_URL);
