@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+env:
+  GCP_PROJECT_ID: plan95
+  GCP_REGION: us-central1
+
 jobs:
   deploy-server:
     name: Deploy server to Cloud Run
@@ -25,16 +29,16 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
-          docker build -t ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/scrumlol/server:${{ github.sha }} ./server
-          docker push ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/scrumlol/server:${{ github.sha }}
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/plan95/server:${{ github.sha }} ./server
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/plan95/server:${{ github.sha }}
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: scrumlol-server
-          region: ${{ secrets.GCP_REGION }}
-          image: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/scrumlol/server:${{ github.sha }}
+          service: plan95-server
+          region: ${{ env.GCP_REGION }}
+          image: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/plan95/server:${{ github.sha }}
           flags: >
             --allow-unauthenticated
             --session-affinity
