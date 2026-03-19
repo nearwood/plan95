@@ -9,7 +9,7 @@ interface Props {
   userData: UserData;
 }
 
-function Avatar({ socketId, user }: { socketId: string; user: { name: string; picture: string | null } }) {
+function Avatar({ user }: { socketId: string; user: { name: string; picture: string | null } }) {
   return (
     <div
       title={user.name}
