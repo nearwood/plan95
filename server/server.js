@@ -178,12 +178,12 @@ fastify.ready().then(() => {
       }
     });
 
-    socket.on("joinRoom", (room, username) => {
+    socket.on("joinRoom", (room, username, picture) => {
       console.info(`user ${username} wants room: ${room}`);
       socket.join(room);
 
       userData[room] = userData[room] || {};
-      userData[room][socket.id] = { name: username };
+      userData[room][socket.id] = { name: username, picture: picture || null };
       fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
       socket.to(room).emit("roomUpdate", userData[room]);
 

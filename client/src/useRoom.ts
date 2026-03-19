@@ -16,7 +16,7 @@ export interface RoomHookResponse {
   roomId: string;
 }
 
-export const useRoom = (type: RoomType, name: string, username: string): RoomHookResponse => {
+export const useRoom = (type: RoomType, name: string, username: string, picture?: string): RoomHookResponse => {
   const { socket, rooms, updateRooms } = useSocket();
 
   const roomId = `${type}:${name}`;
@@ -29,7 +29,7 @@ export const useRoom = (type: RoomType, name: string, username: string): RoomHoo
     /** Rejoin rooms after a reconnection */
     const rejoinRooms = (): void => {
       Object.keys(rooms).forEach((roomName) => {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName, username);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName, username, picture);
       });
     };
 
@@ -37,7 +37,7 @@ export const useRoom = (type: RoomType, name: string, username: string): RoomHoo
     if (!rooms[roomId]) {
       rooms[roomId] = 1;
       if (socket.connected) {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomId, username);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomId, username, picture);
       }
       socket.on('connect', rejoinRooms);
     } else {
@@ -57,9 +57,10 @@ export const useRoom = (type: RoomType, name: string, username: string): RoomHoo
       }
       updateRooms(rooms);
     };
-  }, [name, roomId, rooms, socket, type, updateRooms, username]);
+  }, [name, roomId, rooms, socket, type, updateRooms, username, picture]);
 
   return { socket, roomId };
 };
 
-export const usePokerRoom = (roomId: string, username: string): RoomHookResponse => useRoom(RoomType.POKER, roomId, username);
+export const usePokerRoom = (roomId: string, username: string, picture?: string): RoomHookResponse =>
+  useRoom(RoomType.POKER, roomId, username, picture);

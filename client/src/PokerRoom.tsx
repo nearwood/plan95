@@ -8,6 +8,7 @@ import { PlayingCard } from './PlayingCard';
 import { POKER_VALUES } from './pokerValues';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
+import { AvatarStack } from './AvatarStack';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -24,13 +25,13 @@ interface RoomState {
 }
 
 interface UserData {
-  [socketId: string]: { name: string };
+  [socketId: string]: { name: string; picture: string | null };
 }
 
 function PokerRoom() {
   const { roomName } = useParams();
   const { user, logout } = useOutletContext<{ user: User; logout: () => void }>();
-  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name);
+  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name, user.picture);
   const { connected } = useSocket();
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState<UserData>({});
@@ -142,6 +143,11 @@ function PokerRoom() {
 
       {/* Bottom: Poker table */}
       <div className='pokerBottom'>
+
+        {/* Avatar stack */}
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end', paddingRight: 10 }}>
+          <AvatarStack userData={userData} />
+        </div>
 
         {/* Player cards */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>

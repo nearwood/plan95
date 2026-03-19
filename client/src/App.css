@@ -70,6 +70,12 @@
   flex-shrink: 0;
 }
 
+@keyframes avatarPop {
+  0% { transform: scale(0); opacity: 0; }
+  70% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 .issueDescription {
   font-size: 12px;
   opacity: 0.8;
