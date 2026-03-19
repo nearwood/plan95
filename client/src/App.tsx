@@ -12,6 +12,20 @@ import LoginScreen from './LoginScreen';
 
 const GlobalStyles = createGlobalStyle`
   ${styleReset}
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  #root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #008080;
+    min-height: 100vh;
+    padding: 1rem;
+    box-sizing: border-box;
+  }
   @font-face {
     font-family: 'ms_sans_serif';
     src: url('${ms_sans_serif}') format('woff2');

@@ -170,11 +170,9 @@ function PokerRoom() {
         </div>
 
         {/* Card picker */}
-        {roomState.phase === 'voting' && (
-          <div style={{ marginTop: 'auto' }}>
-            <CardHand myVote={myVote} onVote={castVote} />
-          </div>
-        )}
+        <div style={{ marginTop: 'auto' }}>
+          <CardHand myVote={myVote} onVote={castVote} />
+        </div>
       </div>
     </WindowContent>
     <Frame variant='well' className='footer'>
