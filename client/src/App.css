@@ -62,5 +62,72 @@
 
 
 .pokerWindow {
+  padding: 0 !important;
+}
+
+.pokerTop {
+  padding: 0.5rem;
+  flex-shrink: 0;
+}
+
+.issueDescription {
+  font-size: 12px;
+  opacity: 0.8;
+  max-height: 360px;
+  overflow-y: auto;
+
+  ul, ol {
+    padding-left: 1.5rem;
+    margin: 4px 0;
+  }
+
+  li {
+    list-style: disc;
+    margin: 2px 0;
+  }
+
+  ol li {
+    list-style: decimal;
+  }
+
+  a {
+    color: #0000ee;
+    text-decoration: underline;
+  }
+
+  p {
+    margin: 4px 0;
+  }
+
+  code {
+    font-family: monospace;
+    background: rgba(0,0,0,0.08);
+    padding: 0 3px;
+  }
+
+  h1 {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 8px 0 4px;
+  }
+
+  h2 {
+    font-size: 14px;
+    font-weight: bold;
+    margin: 6px 0 4px;
+  }
+
+  h3 {
+    font-size: 13px;
+    font-weight: bold;
+    margin: 4px 0 2px;
+  }
+}
+
+.pokerBottom {
   background-color: #008001;
+  padding: 0.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }

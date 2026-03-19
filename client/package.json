@@ -10,9 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "adf-to-md": "^1.2.1",
     "js-cookie": "^3.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^6.26.1",
     "react-use-websocket": "^4.8.1",
     "react95": "^4.0.0",

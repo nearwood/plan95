@@ -8,11 +8,13 @@ import { PlayingCard } from './PlayingCard';
 import { POKER_VALUES } from './pokerValues';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
+import Markdown from 'react-markdown';
+import { convert as adfToMd } from 'adf-to-md';
 
 interface JiraIssue {
   key: string;
   summary: string;
-  description: string | null;
+  description: object | null;
 }
 
 interface RoomState {
@@ -113,83 +115,87 @@ function PokerRoom() {
     </Toolbar>
     <WindowContent className='windowContent pokerWindow'>
 
-      {/* Issue loader */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-        <TextInput
-          value={issueInput}
-          onChange={(e: any) => setIssueInput(e.target.value)}
-          onKeyDown={(e: any) => e.key === 'Enter' && loadIssue()}
-          placeholder='PROJ-123 or Jira URL'
-          style={{ flex: 1 }}
-        />
-        <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
-      </div>
-
-      {/* Issue display */}
-      {roomState.issue && (
-        <div style={{ marginBottom: 12, padding: 8, background: 'rgba(0,0,0,0.15)', color: '#fff' }}>
-          <strong style={{ textShadow: '1px 1px 0 #000' }}>{roomState.issue.key}: {roomState.issue.summary}</strong>
-          {roomState.issue.description && (
-            <p style={{ margin: '4px 0 0', fontSize: 12, textShadow: '1px 1px 0 #000', opacity: 0.9 }}>
-              {roomState.issue.description}
-            </p>
-          )}
+      {/* Top: Jira panel */}
+      <div className='pokerTop'>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+          <TextInput
+            value={issueInput}
+            onChange={(e: any) => setIssueInput(e.target.value)}
+            onKeyDown={(e: any) => e.key === 'Enter' && loadIssue()}
+            placeholder='PROJ-123 or Jira URL'
+            style={{ flex: 1 }}
+          />
+          <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
         </div>
-      )}
-      {issueError && <p style={{ color: '#ff4444', margin: '0 0 8px', fontSize: 12 }}>{issueError}</p>}
-
-      {/* Player cards */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
-        {Object.entries(userData).map(([socketId, user]) => {
-          const vote = roomState.votes[socketId];
-          const hasVoted = vote !== null && vote !== undefined;
-          const isMe = socketId === mySocketId;
-          return (
-            <div key={socketId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-              {roomState.phase === 'revealed'
-                ? <PlayingCard value={vote ?? undefined} />
-                : hasVoted
-                  ? <PlayingCard faceDown />
-                  : <PlayingCard />
-              }
-              <span style={{ fontSize: 12, color: '#fff', fontWeight: isMe ? 'bold' : 'normal', textShadow: '1px 1px 0 #000' }}>
-                {user.name || '(anon)'}
-              </span>
-            </div>
-          );
-        })}
+        {roomState.issue && (
+          <div>
+            <strong>{roomState.issue.key}: {roomState.issue.summary}</strong>
+            {roomState.issue.description && (
+              <div className='issueDescription'>
+                <Markdown>{adfToMd(roomState.issue.description).result}</Markdown>
+              </div>
+            )}
+          </div>
+        )}
+        {issueError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{issueError}</p>}
       </div>
 
-      {/* Result */}
-      {roomState.phase === 'revealed' && (
-        <p style={{ margin: '0 0 12px', color: '#fff', textShadow: '1px 1px 0 #000' }}>
-          {average ? <>Average: <strong>{average}</strong></> : 'No numeric votes'}
-        </p>
-      )}
+      {/* Bottom: Poker table */}
+      <div className='pokerBottom'>
 
-      {/* Round controls */}
-      <div style={{ marginBottom: 12 }}>
-        {roomState.phase === 'voting'
-          ? <Button onClick={revealVotes} disabled={votedCount === 0}>
-              Reveal ({votedCount}/{numUsers})
-            </Button>
-          : <Button onClick={resetVotes}>New Round</Button>
-        }
-      </div>
-
-      {/* Card picker */}
-      {roomState.phase === 'voting' && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {POKER_VALUES.map(value => (
-            <PlayingCard
-              key={value}
-              value={value}
-              selected={myVote === value}
-              onClick={() => castVote(value)}
-            />
-          ))}
+        {/* Player cards */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
+          {Object.entries(userData).map(([socketId, user]) => {
+            const vote = roomState.votes[socketId];
+            const hasVoted = vote !== null && vote !== undefined;
+            const isMe = socketId === mySocketId;
+            return (
+              <div key={socketId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                {roomState.phase === 'revealed'
+                  ? <PlayingCard value={vote ?? undefined} />
+                  : hasVoted
+                    ? <PlayingCard faceDown />
+                    : <PlayingCard />
+                }
+                <span style={{ fontSize: 12, color: '#fff', fontWeight: isMe ? 'bold' : 'normal', textShadow: '1px 1px 0 #000' }}>
+                  {user.name || '(anon)'}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      )}
+
+        {/* Result */}
+        {roomState.phase === 'revealed' && (
+          <p style={{ margin: '0 0 12px', color: '#fff', textShadow: '1px 1px 0 #000' }}>
+            {average ? <>Average: <strong>{average}</strong></> : 'No numeric votes'}
+          </p>
+        )}
+
+        {/* Round controls */}
+        <div style={{ marginBottom: 12 }}>
+          {roomState.phase === 'voting'
+            ? <Button onClick={revealVotes} disabled={votedCount === 0}>
+                Reveal ({votedCount}/{numUsers})
+              </Button>
+            : <Button onClick={resetVotes}>New Round</Button>
+          }
+        </div>
+
+        {/* Card picker */}
+        {roomState.phase === 'voting' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {POKER_VALUES.map(value => (
+              <PlayingCard
+                key={value}
+                value={value}
+                selected={myVote === value}
+                onClick={() => castVote(value)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </WindowContent>
     <Frame variant='well' className='footer'>
       {connected

@@ -2,7 +2,30 @@ import Fastify from 'fastify';
 import fastifyIO from "fastify-socket.io";
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
+
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
+
+function signSession(data) {
+  const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
+  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function verifySession(cookie) {
+  if (!cookie) return null;
+  const dot = cookie.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payload = cookie.slice(0, dot);
+  const sig = cookie.slice(dot + 1);
+  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (sig !== expected) return null;
+  try {
+    return JSON.parse(Buffer.from(payload, 'base64url').toString());
+  } catch {
+    return null;
+  }
+}
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
 const ATLASSIAN_CLIENT_ID = process.env.ATLASSIAN_CLIENT_ID;
@@ -23,12 +46,8 @@ const fastify = Fastify({
   credentials: true,
 }).register(cookie);
 
-// In-memory session store: sessionId → { token, user: { accountId, name, email, picture }, cloudId }
-const sessions = {};
-
 function getSession(req) {
-  const sessionId = req.cookies?.session;
-  return sessionId ? sessions[sessionId] : null;
+  return verifySession(req.cookies?.session);
 }
 
 // --- Auth routes ---
@@ -87,8 +106,7 @@ fastify.get('/auth/callback', async (req, reply) => {
   const sites = await sitesRes.json();
   const cloudId = sites?.[0]?.id || null;
 
-  const sessionId = randomUUID();
-  sessions[sessionId] = {
+  const sessionCookie = signSession({
     token: access_token,
     cloudId,
     user: {
@@ -97,10 +115,10 @@ fastify.get('/auth/callback', async (req, reply) => {
       email: me.email,
       picture: me.picture,
     },
-  };
+  });
 
   return reply
-    .setCookie('session', sessionId, {
+    .setCookie('session', sessionCookie, {
       path: '/',
       httpOnly: true,
       sameSite: 'none',
@@ -117,8 +135,6 @@ fastify.get('/auth/me', async (req, reply) => {
 });
 
 fastify.post('/auth/logout', async (req, reply) => {
-  const sessionId = req.cookies?.session;
-  if (sessionId) delete sessions[sessionId];
   return reply.clearCookie('session', { path: '/' }).send({ ok: true });
 });
 
@@ -235,8 +251,8 @@ fastify.ready().then(() => {
       }
 
       const cookieHeader = socket.handshake.headers.cookie || '';
-      const sessionId = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
-      const session = sessionId ? sessions[sessionId] : null;
+      const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
+      const session = verifySession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
       if (!session) {
         socket.emit("issueError", "Not authenticated");
         return;
@@ -257,7 +273,7 @@ fastify.ready().then(() => {
       const issue = {
         key: data.key,
         summary: data.fields.summary,
-        description: extractDescription(data.fields.description),
+        description: data.fields.description ?? null,
       };
 
       const state = getRoom(room);
@@ -266,18 +282,6 @@ fastify.ready().then(() => {
     });
   });
 });
-
-// Jira description is Atlassian Document Format (ADF) — extract plain text
-function extractDescription(adf) {
-  if (!adf) return null;
-  const texts = [];
-  function walk(node) {
-    if (node.type === 'text') texts.push(node.text);
-    if (node.content) node.content.forEach(walk);
-  }
-  walk(adf);
-  return texts.join(' ') || null;
-}
 
 try {
   await fastify.listen({ port: process.env.PORT || 3218, host: '0.0.0.0' });

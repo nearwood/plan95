@@ -18,15 +18,15 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Build and push Docker image
         run: |
@@ -35,7 +35,7 @@ jobs:
           docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/plan95/server:${{ github.sha }}
 
       - name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: plan95-server
           region: ${{ env.GCP_REGION }}
@@ -46,7 +46,7 @@ jobs:
             --min-instances=0
             --max-instances=1
             --set-env-vars=ALLOWED_ORIGIN=https://nearwood.dev,APP_URL=https://nearwood.dev/plan95,ATLASSIAN_REDIRECT_URI=https://plan95-server-558883115349.us-central1.run.app/auth/callback,NODE_ENV=production
-            --set-secrets=ATLASSIAN_CLIENT_ID=ATLASSIAN_CLIENT_ID:latest,ATLASSIAN_CLIENT_SECRET=ATLASSIAN_CLIENT_SECRET:latest
+            --set-secrets=ATLASSIAN_CLIENT_ID=ATLASSIAN_CLIENT_ID:latest,ATLASSIAN_CLIENT_SECRET=ATLASSIAN_CLIENT_SECRET:latest,SESSION_SECRET=SESSION_SECRET:latest
 
   deploy-client:
     name: Deploy client to GitHub Pages
@@ -60,9 +60,9 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -76,7 +76,7 @@ jobs:
         run: npm run build
         working-directory: client
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: client/dist
 
