@@ -4,8 +4,8 @@ import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuList
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
-import { PlayingCard } from './PlayingCard';
 import { CardHand } from './CardHand';
+import { CardPile } from './CardPile';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
@@ -149,27 +149,8 @@ function PokerRoom() {
           <AvatarStack userData={userData} />
         </div>
 
-        {/* Player cards */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
-          {Object.entries(userData).map(([socketId, user]) => {
-            const vote = roomState.votes[socketId];
-            const hasVoted = vote !== null && vote !== undefined;
-            const isMe = socketId === mySocketId;
-            return (
-              <div key={socketId} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                {roomState.phase === 'revealed'
-                  ? <PlayingCard value={vote ?? undefined} />
-                  : hasVoted
-                    ? <PlayingCard faceDown />
-                    : <PlayingCard />
-                }
-                <span style={{ fontSize: 12, color: '#fff', fontWeight: isMe ? 'bold' : 'normal', textShadow: '1px 1px 0 #000' }}>
-                  {user.name || '(anon)'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {/* Card pile */}
+        <CardPile userData={userData} roomState={roomState} />
 
         {/* Result */}
         {roomState.phase === 'revealed' && (
