@@ -5,7 +5,7 @@ import { usePokerRoom } from './useRoom';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { PlayingCard } from './PlayingCard';
-import { POKER_VALUES } from './pokerValues';
+import { CardHand } from './CardHand';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
@@ -190,15 +190,8 @@ function PokerRoom() {
 
         {/* Card picker */}
         {roomState.phase === 'voting' && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {POKER_VALUES.map(value => (
-              <PlayingCard
-                key={value}
-                value={value}
-                selected={myVote === value}
-                onClick={() => castVote(value)}
-              />
-            ))}
+          <div style={{ marginTop: 'auto' }}>
+            <CardHand myVote={myVote} onVote={castVote} />
           </div>
         )}
       </div>

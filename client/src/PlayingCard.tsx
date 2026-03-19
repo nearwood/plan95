@@ -20,20 +20,17 @@ const POKER_CARD_MAP: Record<string, [number, number]> = {
 interface PlayingCardProps {
   value?: string;
   faceDown?: boolean;
-  selected?: boolean;
   onClick?: () => void;
   style?: React.CSSProperties;
 }
 
-export function PlayingCard({ value, faceDown = false, selected = false, onClick, style }: PlayingCardProps) {
+export function PlayingCard({ value, faceDown = false, onClick, style }: PlayingCardProps) {
   const baseStyle: React.CSSProperties = {
     width: CARD_W,
     height: CARD_H,
     display: 'inline-block',
     flexShrink: 0,
     cursor: onClick ? 'pointer' : 'default',
-    outline: selected ? '3px solid #ffff00' : '3px solid transparent',
-    outlineOffset: '2px',
     ...style,
   };
 
