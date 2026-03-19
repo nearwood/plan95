@@ -6,6 +6,7 @@ import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useCallback, useEffect, useState } from 'react';
 import { CardHand } from './CardHand';
 import { CardPile } from './CardPile';
+import { VoteDistribution } from './VoteDistribution';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
@@ -149,8 +150,13 @@ function PokerRoom() {
           <AvatarStack userData={userData} />
         </div>
 
-        {/* Card pile */}
-        <CardPile userData={userData} roomState={roomState} />
+        {/* Card pile + vote distribution */}
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          {roomState.phase === 'revealed' && (
+            <VoteDistribution votes={roomState.votes} userData={userData} />
+          )}
+          <CardPile userData={userData} roomState={roomState} />
+        </div>
 
         {/* Result */}
         {roomState.phase === 'revealed' && (
