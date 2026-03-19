@@ -23,7 +23,7 @@ const GlobalStyles = createGlobalStyle`
     justify-content: center;
     background: #008080;
     min-height: 100vh;
-    padding: 1rem;
+    padding: 16px;
     box-sizing: border-box;
   }
   @font-face {

@@ -36,7 +36,7 @@
 }
 .window {
   width: min(900px, calc(100vw - 2rem));
-  height: min(700px, calc(100vh - 2rem));
+  height: calc(100vh - 32px);
   display: flex !important;
   flex-direction: column;
   justify-content: space-between;
@@ -67,7 +67,9 @@
 
 .pokerTop {
   padding: 0.5rem;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 @keyframes avatarPop {
@@ -79,8 +81,6 @@
 .issueDescription {
   font-size: 12px;
   opacity: 0.8;
-  max-height: 360px;
-  overflow-y: auto;
 
   ul, ol {
     padding-left: 1.5rem;
@@ -134,7 +134,8 @@
   background-color: #008001;
   padding: 0.5rem;
   flex: 1;
-  min-height: 0;
+  flex-shrink: 0;
+  min-height: 480px;
   display: flex;
   flex-direction: column;
 }
