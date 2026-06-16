@@ -51,10 +51,30 @@ function getSession(req) {
   return verifySession(req.cookies?.session);
 }
 
+// Resolve a post-login redirect from the OAuth `state` param. Only relative
+// in-app paths are honored, to avoid open-redirect to external URLs.
+function resolveReturnUrl(state) {
+  try {
+    const { returnTo } = JSON.parse(Buffer.from(state, 'base64url').toString());
+    if (typeof returnTo === 'string' && returnTo) {
+      const clean = returnTo.replace(/^\/+/, '');
+      if (clean && !clean.startsWith('/') && !clean.includes('://')) {
+        return `${APP_URL}/${clean}`;
+      }
+    }
+  } catch {
+    // fall through to default
+  }
+  return APP_URL;
+}
+
 // --- Auth routes ---
 
 fastify.get('/auth/login', async (req, reply) => {
-  const state = randomUUID();
+  // Carry the desired return path through OAuth via the `state` param, which
+  // Atlassian round-trips back to the callback unchanged.
+  const returnTo = typeof req.query.returnTo === 'string' ? req.query.returnTo : '';
+  const state = Buffer.from(JSON.stringify({ nonce: randomUUID(), returnTo })).toString('base64url');
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: ATLASSIAN_CLIENT_ID,
@@ -68,7 +88,7 @@ fastify.get('/auth/login', async (req, reply) => {
 });
 
 fastify.get('/auth/callback', async (req, reply) => {
-  const { code, error } = req.query;
+  const { code, error, state } = req.query;
 
   if (error || !code) {
     return reply.redirect(`${APP_URL}?auth_error=1`);
@@ -138,7 +158,7 @@ fastify.get('/auth/callback', async (req, reply) => {
       secure: true,
       maxAge: 60 * 60 * 8, // 8 hours
     })
-    .redirect(APP_URL);
+    .redirect(resolveReturnUrl(state));
 });
 
 fastify.get('/auth/me', async (req, reply) => {

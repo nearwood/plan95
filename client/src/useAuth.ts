@@ -22,7 +22,12 @@ export function useAuth() {
   }, []);
 
   const login = () => {
-    window.location.href = `${SERVER_URL}/auth/login`;
+    // Remember the in-app route (e.g. "poker/my-room") so the OAuth callback can
+    // send the user back to where they landed instead of the lobby.
+    const base = import.meta.env.BASE_URL;
+    let returnTo = window.location.pathname;
+    if (returnTo.startsWith(base)) returnTo = returnTo.slice(base.length);
+    window.location.href = `${SERVER_URL}/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
   };
 
   const logout = () => {
