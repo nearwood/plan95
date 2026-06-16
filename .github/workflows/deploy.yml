@@ -45,7 +45,7 @@ jobs:
             --session-affinity
             --min-instances=0
             --max-instances=1
-            --set-env-vars=ALLOWED_ORIGIN=https://nearwood.dev,APP_URL=https://nearwood.dev/plan95,ATLASSIAN_REDIRECT_URI=https://plan95-server-558883115349.us-central1.run.app/auth/callback,NODE_ENV=production
+            --set-env-vars=ALLOWED_ORIGIN=https://nearwood.dev,APP_URL=https://nearwood.dev/plan95,ATLASSIAN_REDIRECT_URI=https://plan95-server-558883115349.us-central1.run.app/auth/callback,JIRA_SITE_URL=palmetto.atlassian.net,NODE_ENV=production
             --set-secrets=ATLASSIAN_CLIENT_ID=ATLASSIAN_CLIENT_ID:latest,ATLASSIAN_CLIENT_SECRET=ATLASSIAN_CLIENT_SECRET:latest,SESSION_SECRET=SESSION_SECRET:latest
 
   deploy-client:

@@ -32,6 +32,7 @@ const ATLASSIAN_CLIENT_ID = process.env.ATLASSIAN_CLIENT_ID;
 const ATLASSIAN_CLIENT_SECRET = process.env.ATLASSIAN_CLIENT_SECRET;
 const ATLASSIAN_REDIRECT_URI = process.env.ATLASSIAN_REDIRECT_URI || 'http://localhost:3218/auth/callback';
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+const JIRA_SITE_URL = process.env.JIRA_SITE_URL; // e.g. "palmetto.atlassian.net"
 
 const fastify = Fastify({
   logger: true
@@ -104,7 +105,19 @@ fastify.get('/auth/callback', async (req, reply) => {
     headers: { Authorization: `Bearer ${access_token}` },
   });
   const sites = await sitesRes.json();
-  const cloudId = sites?.[0]?.id || null;
+
+  // Pick the team's configured site, not just the first one the user happens to have.
+  const want = JIRA_SITE_URL?.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const site = want
+    ? sites?.find((s) => s.url.replace(/^https?:\/\//, '').replace(/\/$/, '') === want)
+    : sites?.[0];
+
+  if (!site) {
+    // The user authenticated fine but can't reach the team's Jira instance.
+    fastify.log.warn(`User ${me.email} has no access to ${want ?? 'any Jira site'}`);
+    return reply.redirect(`${APP_URL}?auth_error=no_jira_access`);
+  }
+  const cloudId = site.id;
 
   const sessionCookie = signSession({
     token: access_token,
