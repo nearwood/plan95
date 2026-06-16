@@ -42,8 +42,8 @@ function PokerRoom() {
   const navigate = useNavigate();
 
   const numUsers = Object.keys(userData).length;
-  const mySocketId = roomSocket?.id || '';
-  const myVote = roomState.votes[mySocketId] ?? null;
+  // Identify our own vote by stable account id (survives socket reconnects).
+  const myVote = roomState.votes[user.accountId] ?? null;
   const votedCount = Object.values(roomState.votes).filter(v => v !== null).length;
 
   const numericVotes = roomState.phase === 'revealed'

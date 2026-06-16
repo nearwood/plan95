@@ -173,8 +173,14 @@ fastify.post('/auth/logout', async (req, reply) => {
 
 // --- Room & voting state ---
 
-const userData = {};
-const roomState = {};
+// Keep a user's presence and vote alive this long after their socket drops, so
+// a reconnect (e.g. Cloud Run's ~5min request timeout) restores them seamlessly.
+const RECONNECT_GRACE_MS = 10_000;
+
+const userData = {};      // room -> userId -> { name, picture }
+const roomState = {};     // room -> { phase, votes: { userId: value }, issue }
+const liveSockets = {};   // room -> userId -> Set<socketId>
+const removalTimers = {}; // room -> userId -> Timeout
 
 function getRoom(room) {
   if (!roomState[room]) {
@@ -183,9 +189,57 @@ function getRoom(room) {
   return roomState[room];
 }
 
+// Stable identity for a connection: the authenticated Atlassian accountId, which
+// survives reconnects (socket.id does not). Falls back to socket.id if unauthenticated.
+function userIdFromSocket(socket) {
+  const cookieHeader = socket.handshake.headers.cookie || '';
+  const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
+  const session = verifySession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
+  return session?.user?.accountId || socket.id;
+}
+
+function trackSocket(room, userId, socketId) {
+  liveSockets[room] = liveSockets[room] || {};
+  liveSockets[room][userId] = liveSockets[room][userId] || new Set();
+  liveSockets[room][userId].add(socketId);
+  // A connection arrived — cancel any pending removal from a recent drop.
+  if (removalTimers[room]?.[userId]) {
+    clearTimeout(removalTimers[room][userId]);
+    delete removalTimers[room][userId];
+  }
+}
+
+// Drop a socket for a user. The user is only removed once they have no live
+// sockets left: immediately on an intentional leave, or after a grace window on
+// a disconnect (so reconnects keep their vote).
+function untrackSocket(room, userId, socketId, { immediate } = {}) {
+  const set = liveSockets[room]?.[userId];
+  if (!set) return;
+  set.delete(socketId);
+  if (set.size > 0) return; // still connected elsewhere (e.g. another tab)
+
+  const remove = () => {
+    if (liveSockets[room]?.[userId]?.size > 0) return; // reconnected during grace
+    delete liveSockets[room]?.[userId];
+    delete userData[room]?.[userId];
+    delete getRoom(room).votes[userId];
+    if (removalTimers[room]) delete removalTimers[room][userId];
+    fastify.io.to(room).emit("roomUpdate", userData[room] || {});
+    fastify.io.to(room).emit("roomState", getRoom(room));
+  };
+
+  if (immediate) {
+    remove();
+  } else {
+    removalTimers[room] = removalTimers[room] || {};
+    removalTimers[room][userId] = setTimeout(remove, RECONNECT_GRACE_MS);
+  }
+}
+
 fastify.ready().then(() => {
   fastify.io.on("connection", (socket) => {
-    console.info('Socket connected', socket.id);
+    socket.data.userId = userIdFromSocket(socket);
+    console.info('Socket connected', socket.id, 'user', socket.data.userId);
 
     socket.on("message", (message) => {
       console.info('Socket message:', message);
@@ -200,28 +254,27 @@ fastify.ready().then(() => {
 
       for (const room of socket.rooms) {
         if (room !== socket.id) {
-          userData[room] = userData[room] || {};
-          delete userData[room][socket.id];
-          socket.to(room).emit("roomUpdate", userData[room]);
-
-          const state = getRoom(room);
-          delete state.votes[socket.id];
-          socket.to(room).emit("roomState", state);
+          // Keep the user's vote/presence through the grace window in case this
+          // is a transient drop and they reconnect.
+          untrackSocket(room, socket.data.userId, socket.id);
         }
       }
     });
 
     socket.on("joinRoom", (room, username, picture) => {
       console.info(`user ${username} wants room: ${room}`);
+      const userId = socket.data.userId;
       socket.join(room);
+      trackSocket(room, userId, socket.id);
 
       userData[room] = userData[room] || {};
-      userData[room][socket.id] = { name: username, picture: picture || null };
+      userData[room][userId] = { name: username, picture: picture || null };
       fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
       socket.to(room).emit("roomUpdate", userData[room]);
 
       const state = getRoom(room);
-      state.votes[socket.id] = null;
+      // Preserve an existing vote across reconnects; only initialize on first join.
+      if (!(userId in state.votes)) state.votes[userId] = null;
       fastify.io.to(socket.id).emit("roomState", state);
       socket.to(room).emit("roomState", state);
 
@@ -231,23 +284,18 @@ fastify.ready().then(() => {
     socket.on("leaveRoom", (room) => {
       console.info('socket leaving room:', room);
       socket.leave(room);
+      // Intentional leave — remove now (unless the user still has another tab open).
+      untrackSocket(room, socket.data.userId, socket.id, { immediate: true });
 
-      userData[room] = userData[room] || {};
-      delete userData[room][socket.id];
-      socket.to(room).emit("roomUpdate", userData[room]);
-
-      const state = getRoom(room);
-      delete state.votes[socket.id];
-      socket.to(room).emit("roomState", state);
-
-      console.log(`${Object.keys(userData[room]).length} users in ${room}`);
+      console.log(`${Object.keys(userData[room] || {}).length} users in ${room}`);
     });
 
     socket.on("updateUser", (room, data) => {
       console.info('updateUser', room, data);
+      const userId = socket.data.userId;
       userData[room] = userData[room] || {};
-      userData[room][socket.id] = {
-        ...userData[room][socket.id],
+      userData[room][userId] = {
+        ...userData[room][userId],
         ...data,
       };
       fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
@@ -256,7 +304,7 @@ fastify.ready().then(() => {
 
     socket.on("castVote", (room, value) => {
       const state = getRoom(room);
-      state.votes[socket.id] = value;
+      state.votes[socket.data.userId] = value;
       fastify.io.to(room).emit("roomState", state);
     });
 
