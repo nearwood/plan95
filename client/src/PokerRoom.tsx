@@ -13,6 +13,8 @@ import { AvatarStack } from './AvatarStack';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3218';
+
 interface JiraIssue {
   key: string;
   summary: string;
@@ -66,11 +68,9 @@ function PokerRoom() {
   useEffect(() => {
     roomSocket?.on('roomUpdate', handleRoomUpdate);
     roomSocket?.on('roomState', handleRoomState);
-    roomSocket?.on('issueError', (msg: string) => setIssueError(msg));
     return () => {
       roomSocket?.off('roomUpdate', handleRoomUpdate);
       roomSocket?.off('roomState', handleRoomState);
-      roomSocket?.off('issueError');
     };
   }, [roomSocket, handleRoomUpdate, handleRoomState]);
 
@@ -82,9 +82,23 @@ function PokerRoom() {
   const revealVotes = () => roomSocket?.emit('revealVotes', roomId);
   const resetVotes = () => roomSocket?.emit('resetVotes', roomId);
 
-  const loadIssue = () => {
+  const loadIssue = async () => {
     setIssueError(null);
-    roomSocket?.emit('loadIssue', roomId, issueInput);
+    try {
+      const res = await fetch(`${SERVER_URL}/issue`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: roomId, input: issueInput }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setIssueError(data.error || 'Could not load issue');
+      }
+      // On success the new issue arrives via the roomState socket broadcast.
+    } catch {
+      setIssueError('Could not load issue');
+    }
   };
 
   function goToLobby() {

@@ -2,29 +2,90 @@ import Fastify from 'fastify';
 import fastifyIO from "fastify-socket.io";
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
-import { randomUUID, createHmac } from 'crypto';
+import { randomUUID, randomBytes, scryptSync, createCipheriv, createDecipheriv } from 'crypto';
 
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
 
-function signSession(data) {
-  const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
-  const sig = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  return `${payload}.${sig}`;
+// The session cookie now carries a long-lived refresh token, so encrypt it
+// (AES-256-GCM, authenticated) rather than merely signing it. The key is
+// derived once from SESSION_SECRET at startup.
+const SESSION_KEY = scryptSync(SESSION_SECRET, 'plan95-session', 32);
+
+// Persistent login: cookie lives 30 days, well beyond the ~1h access token,
+// which we silently refresh using the stored refresh token.
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // seconds
+const TOKEN_REFRESH_BUFFER_MS = 60_000; // refresh a minute before expiry
+
+const sessionCookieOptions = {
+  path: '/',
+  httpOnly: true,
+  sameSite: 'none',
+  secure: true,
+  maxAge: SESSION_MAX_AGE,
+};
+
+function sealSession(data) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', SESSION_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(data), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, ciphertext].map((b) => b.toString('base64url')).join('.');
 }
 
-function verifySession(cookie) {
+function openSession(cookie) {
   if (!cookie) return null;
-  const dot = cookie.lastIndexOf('.');
-  if (dot === -1) return null;
-  const payload = cookie.slice(0, dot);
-  const sig = cookie.slice(dot + 1);
-  const expected = createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
-  if (sig !== expected) return null;
+  const parts = cookie.split('.');
+  if (parts.length !== 3) return null;
   try {
-    return JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const [iv, tag, ciphertext] = parts.map((p) => Buffer.from(p, 'base64url'));
+    const decipher = createDecipheriv('aes-256-gcm', SESSION_KEY, iv);
+    decipher.setAuthTag(tag);
+    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return JSON.parse(plaintext.toString('utf8'));
   } catch {
     return null;
   }
+}
+
+function setSessionCookie(reply, session) {
+  reply.setCookie('session', sealSession(session), sessionCookieOptions);
+}
+
+// Return a session whose access token is valid, refreshing it via the stored
+// refresh token if it has (nearly) expired. Returns { session, changed } so the
+// caller can re-set the cookie when the token (and rotated refresh token) moved,
+// or null when the refresh token is no longer valid (full re-login required).
+async function ensureFreshToken(session) {
+  if (session.expiresAt && Date.now() < session.expiresAt - TOKEN_REFRESH_BUFFER_MS) {
+    return { session, changed: false };
+  }
+  if (!session.refreshToken) return null;
+
+  const res = await fetch('https://auth.atlassian.com/oauth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'refresh_token',
+      client_id: ATLASSIAN_CLIENT_ID,
+      client_secret: ATLASSIAN_CLIENT_SECRET,
+      refresh_token: session.refreshToken,
+    }),
+  });
+
+  if (!res.ok) {
+    fastify.log.warn('Token refresh failed: ' + await res.text());
+    return null;
+  }
+
+  const data = await res.json();
+  const next = {
+    ...session,
+    token: data.access_token,
+    // Atlassian rotates refresh tokens; fall back to the prior one if omitted.
+    refreshToken: data.refresh_token || session.refreshToken,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
+  };
+  return { session: next, changed: true };
 }
 
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'http://localhost:5173';
@@ -46,10 +107,6 @@ const fastify = Fastify({
   origin: ALLOWED_ORIGIN,
   credentials: true,
 }).register(cookie);
-
-function getSession(req) {
-  return verifySession(req.cookies?.session);
-}
 
 // Resolve a post-login redirect from the OAuth `state` param. Only relative
 // in-app paths are honored, to avoid open-redirect to external URLs.
@@ -112,7 +169,7 @@ fastify.get('/auth/callback', async (req, reply) => {
     return reply.redirect(`${APP_URL}?auth_error=1`);
   }
 
-  const { access_token } = await tokenRes.json();
+  const { access_token, refresh_token, expires_in } = await tokenRes.json();
 
   // Get user identity
   const meRes = await fetch('https://api.atlassian.com/me', {
@@ -139,8 +196,10 @@ fastify.get('/auth/callback', async (req, reply) => {
   }
   const cloudId = site.id;
 
-  const sessionCookie = signSession({
+  setSessionCookie(reply, {
     token: access_token,
+    refreshToken: refresh_token,
+    expiresAt: Date.now() + (expires_in ?? 3600) * 1000,
     cloudId,
     user: {
       accountId: me.account_id,
@@ -150,21 +209,19 @@ fastify.get('/auth/callback', async (req, reply) => {
     },
   });
 
-  return reply
-    .setCookie('session', sessionCookie, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'none',
-      secure: true,
-      maxAge: 60 * 60 * 8, // 8 hours
-    })
-    .redirect(resolveReturnUrl(state));
+  return reply.redirect(resolveReturnUrl(state));
 });
 
 fastify.get('/auth/me', async (req, reply) => {
-  const session = getSession(req);
+  const session = openSession(req.cookies?.session);
   if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
-  return reply.send(session.user);
+
+  const fresh = await ensureFreshToken(session);
+  if (!fresh) {
+    return reply.clearCookie('session', { path: '/' }).code(401).send({ error: 'Session expired' });
+  }
+  if (fresh.changed) setSessionCookie(reply, fresh.session);
+  return reply.send(fresh.session.user);
 });
 
 fastify.post('/auth/logout', async (req, reply) => {
@@ -189,12 +246,50 @@ function getRoom(room) {
   return roomState[room];
 }
 
+// Load a Jira issue into a room. This lives on HTTP (not the websocket) so it can
+// refresh the access token and re-set the session cookie on its way through; the
+// resulting issue is broadcast to the room over socket.io like any other update.
+fastify.post('/issue', async (req, reply) => {
+  const session = openSession(req.cookies?.session);
+  if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
+
+  const fresh = await ensureFreshToken(session);
+  if (!fresh) {
+    return reply.clearCookie('session', { path: '/' }).code(401).send({ error: 'Session expired' });
+  }
+  if (fresh.changed) setSessionCookie(reply, fresh.session);
+
+  const { room, input } = req.body ?? {};
+  // Accept bare key (PROJ-123) or full Jira URL
+  const key = typeof input === 'string' ? input.match(/([A-Z][A-Z0-9_]+-\d+)/)?.[1] : null;
+  if (!key) return reply.code(400).send({ error: 'Invalid issue key or URL' });
+
+  const { token, cloudId } = fresh.session;
+  const res = await fetch(
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=summary,description`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+  );
+  if (!res.ok) return reply.code(502).send({ error: `Could not load ${key}` });
+
+  const data = await res.json();
+  const issue = {
+    key: data.key,
+    summary: data.fields.summary,
+    description: data.fields.description ?? null,
+  };
+
+  const state = getRoom(room);
+  state.issue = issue;
+  fastify.io.to(room).emit('roomState', state);
+  return reply.send({ ok: true });
+});
+
 // Stable identity for a connection: the authenticated Atlassian accountId, which
 // survives reconnects (socket.id does not). Falls back to socket.id if unauthenticated.
 function userIdFromSocket(socket) {
   const cookieHeader = socket.handshake.headers.cookie || '';
   const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
-  const session = verifySession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
+  const session = openSession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
   return session?.user?.accountId || socket.id;
 }
 
@@ -320,45 +415,6 @@ fastify.ready().then(() => {
       Object.keys(state.votes).forEach(id => {
         state.votes[id] = null;
       });
-      fastify.io.to(room).emit("roomState", state);
-    });
-
-    socket.on("loadIssue", async (room, input) => {
-      // Accept bare key (PROJ-123) or full Jira URL
-      const key = input.match(/([A-Z][A-Z0-9_]+-\d+)/)?.[1];
-      if (!key) {
-        socket.emit("issueError", "Invalid issue key or URL");
-        return;
-      }
-
-      const cookieHeader = socket.handshake.headers.cookie || '';
-      const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
-      const session = verifySession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
-      if (!session) {
-        socket.emit("issueError", "Not authenticated");
-        return;
-      }
-
-      const { token, cloudId } = session;
-      const res = await fetch(
-        `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=summary,description`,
-        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
-      );
-
-      if (!res.ok) {
-        socket.emit("issueError", `Could not load ${key}`);
-        return;
-      }
-
-      const data = await res.json();
-      const issue = {
-        key: data.key,
-        summary: data.fields.summary,
-        description: data.fields.description ?? null,
-      };
-
-      const state = getRoom(room);
-      state.issue = issue;
       fastify.io.to(room).emit("roomState", state);
     });
   });
