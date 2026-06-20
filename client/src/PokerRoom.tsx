@@ -11,6 +11,7 @@ import { useSocket } from './socketContext';
 import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
 import { SiteSelector } from './SiteSelector';
+import { MenuBar } from './MenuBar';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -34,10 +35,9 @@ interface UserData {
 
 function PokerRoom() {
   const { roomName } = useParams();
-  const { user, logout } = useOutletContext<{ user: User; logout: () => void }>();
+  const { user } = useOutletContext<{ user: User }>();
   const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name, user.picture);
   const { connected } = useSocket();
-  // const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState<UserData>({});
   const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {}, issue: null });
   const [issueInput, setIssueInput] = useState('');
@@ -113,25 +113,7 @@ function PokerRoom() {
         <span className='close-icon' />
       </Button>
     </WindowHeader>
-    {/* Menu bar hidden for now.
-    <Toolbar className='toolbar'>
-      <Button variant='menu' size='sm'>File</Button>
-      <Button variant='menu' size='sm'>Edit</Button>
-      <Button variant='menu' size='sm'>Room</Button>
-      <Button variant='menu' size='sm' onClick={() => setHelpMenuOpen(!helpMenuOpen)}>
-        Help
-        {helpMenuOpen && <MenuList
-          style={{ position: 'absolute', top: 24, zIndex: 9999 }}
-          onClick={() => setHelpMenuOpen(false)}
-        >
-          <MenuListItem size='sm' disabled>Copy link</MenuListItem>
-          <MenuListItem size='sm' disabled>Twitter</MenuListItem>
-          <Separator />
-          <MenuListItem size='sm'>About</MenuListItem>
-        </MenuList>}
-      </Button>
-    </Toolbar>
-    */}
+    <MenuBar />
     <WindowContent className='windowContent pokerWindow'>
 
       {/* Top: Jira panel */}
@@ -205,7 +187,7 @@ function PokerRoom() {
       }
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
         <SiteSelector />
-        <Button size='sm' onClick={logout}>{user.name}</Button>
+        <span>{user.name}</span>
       </div>
     </Frame>
   </>);
