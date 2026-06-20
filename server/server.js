@@ -52,11 +52,32 @@ function openSession(cookie) {
   }
 }
 
-function setSessionCookie(reply, session) {
-  const value = sealSession(session);
-  // Browsers reject cookies over ~4096 bytes (name + value + attributes).
-  fastify.log.info(`session cookie size: ${Buffer.byteLength(value)} bytes`);
-  reply.setCookie('session', value, sessionCookieOptions);
+// The session spans two encrypted cookies because the Atlassian access and
+// refresh tokens together exceed the ~4096-byte per-cookie limit:
+//   session_at -> { token, expiresAt }                  (the access token)
+//   session    -> { refreshToken, cloudId, sites, user } (refresh token + identity)
+const ACCESS_COOKIE = 'session_at';
+const CONTEXT_COOKIE = 'session';
+
+function writeSession(reply, session) {
+  const { token, expiresAt, refreshToken, cloudId, sites, user } = session;
+  reply.setCookie(ACCESS_COOKIE, sealSession({ token, expiresAt }), sessionCookieOptions);
+  reply.setCookie(CONTEXT_COOKIE, sealSession({ refreshToken, cloudId, sites, user }), sessionCookieOptions);
+}
+
+// Reassemble the session from both cookies. Returns null when the context cookie
+// (refresh token + identity) is missing; a missing/expired access cookie is fine,
+// since ensureFreshToken will mint a new access token from the refresh token.
+function readSession(req) {
+  const context = openSession(req.cookies?.[CONTEXT_COOKIE]);
+  if (!context) return null;
+  const access = openSession(req.cookies?.[ACCESS_COOKIE]) ?? {};
+  return { ...context, token: access.token, expiresAt: access.expiresAt };
+}
+
+function clearSession(reply) {
+  reply.clearCookie(ACCESS_COOKIE, { path: '/' });
+  reply.clearCookie(CONTEXT_COOKIE, { path: '/' });
 }
 
 // Return a session whose access token is valid, refreshing it via the stored
@@ -204,7 +225,7 @@ fastify.get('/auth/callback', async (req, reply) => {
     return reply.redirect(`${APP_URL}?auth_error=no_jira_access`);
   }
 
-  setSessionCookie(reply, {
+  writeSession(reply, {
     token: access_token,
     refreshToken: refresh_token,
     expiresAt: Date.now() + (expires_in ?? 3600) * 1000,
@@ -222,14 +243,15 @@ fastify.get('/auth/callback', async (req, reply) => {
 });
 
 fastify.get('/auth/me', async (req, reply) => {
-  const session = openSession(req.cookies?.session);
+  const session = readSession(req);
   if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
 
   const fresh = await ensureFreshToken(session);
   if (!fresh) {
-    return reply.clearCookie('session', { path: '/' }).code(401).send({ error: 'Session expired' });
+    clearSession(reply);
+    return reply.code(401).send({ error: 'Session expired' });
   }
-  if (fresh.changed) setSessionCookie(reply, fresh.session);
+  if (fresh.changed) writeSession(reply, fresh.session);
   return reply.send({
     ...fresh.session.user,
     sites: fresh.session.sites ?? [],
@@ -239,7 +261,7 @@ fastify.get('/auth/me', async (req, reply) => {
 
 // Switch the active Jira site for this user's session.
 fastify.post('/auth/site', async (req, reply) => {
-  const session = openSession(req.cookies?.session);
+  const session = readSession(req);
   if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
 
   const { cloudId } = req.body ?? {};
@@ -247,12 +269,13 @@ fastify.post('/auth/site', async (req, reply) => {
   if (!site) return reply.code(400).send({ error: 'Unknown site' });
 
   session.cloudId = cloudId;
-  setSessionCookie(reply, session);
+  writeSession(reply, session);
   return reply.send({ cloudId });
 });
 
 fastify.post('/auth/logout', async (req, reply) => {
-  return reply.clearCookie('session', { path: '/' }).send({ ok: true });
+  clearSession(reply);
+  return reply.send({ ok: true });
 });
 
 // --- Room & voting state ---
@@ -277,14 +300,15 @@ function getRoom(room) {
 // refresh the access token and re-set the session cookie on its way through; the
 // resulting issue is broadcast to the room over socket.io like any other update.
 fastify.post('/issue', async (req, reply) => {
-  const session = openSession(req.cookies?.session);
+  const session = readSession(req);
   if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
 
   const fresh = await ensureFreshToken(session);
   if (!fresh) {
-    return reply.clearCookie('session', { path: '/' }).code(401).send({ error: 'Session expired' });
+    clearSession(reply);
+    return reply.code(401).send({ error: 'Session expired' });
   }
-  if (fresh.changed) setSessionCookie(reply, fresh.session);
+  if (fresh.changed) writeSession(reply, fresh.session);
 
   const { room, input } = req.body ?? {};
   // Accept bare key (PROJ-123) or full Jira URL
