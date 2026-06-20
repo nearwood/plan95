@@ -16,11 +16,16 @@ const SESSION_KEY = scryptSync(SESSION_SECRET, 'plan95-session', 32);
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // seconds
 const TOKEN_REFRESH_BUFFER_MS = 60_000; // refresh a minute before expiry
 
+// `SameSite=None` requires `Secure`, which browsers won't set/send over plain
+// http://localhost. In dev fall back to lax+insecure so the session cookie works
+// over HTTP; in production keep the cross-site-safe none+secure pair.
+const IS_PROD = process.env.NODE_ENV === 'production';
+
 const sessionCookieOptions = {
   path: '/',
   httpOnly: true,
-  sameSite: 'none',
-  secure: true,
+  sameSite: IS_PROD ? 'none' : 'lax',
+  secure: IS_PROD,
   maxAge: SESSION_MAX_AGE,
 };
 
@@ -48,7 +53,10 @@ function openSession(cookie) {
 }
 
 function setSessionCookie(reply, session) {
-  reply.setCookie('session', sealSession(session), sessionCookieOptions);
+  const value = sealSession(session);
+  // Browsers reject cookies over ~4096 bytes (name + value + attributes).
+  fastify.log.info(`session cookie size: ${Buffer.byteLength(value)} bytes`);
+  reply.setCookie('session', value, sessionCookieOptions);
 }
 
 // Return a session whose access token is valid, refreshing it via the stored
