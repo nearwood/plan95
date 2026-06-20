@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Toolbar, Button, MenuList, MenuListItem } from 'react95';
+import { Toolbar, Button, MenuList, MenuListItem, Separator } from 'react95';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { User } from './useAuth';
 
@@ -56,7 +56,9 @@ export function MenuBar({ inLobby = false }: { inLobby?: boolean }) {
           Room
           {openMenu === 'room' && (
             <MenuList style={menuListStyle} onClick={close}>
-              <MenuListItem size='sm' onClick={() => navigate('/')}>Return to Lobby</MenuListItem>
+              <MenuListItem size='sm' onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy URL</MenuListItem>
+              <Separator />
+              <MenuListItem size='sm' onClick={() => navigate('/')}>Return To Lobby</MenuListItem>
             </MenuList>
           )}
         </Button>
@@ -69,7 +71,7 @@ export function MenuBar({ inLobby = false }: { inLobby?: boolean }) {
               size='sm'
               onClick={() => window.open(ISSUES_URL, '_blank', 'noopener,noreferrer')}
             >
-              Report an issue
+              Report An Issue
             </MenuListItem>
           </MenuList>
         )}

@@ -28,9 +28,10 @@ function Lobby() {
       <Button onClick={createRoom}>Create Room</Button>
     </WindowContent>
     <Frame variant='well' className='footer'>
-      <span>{connected ? `${user.name} · ` : 'Connecting... · '}</span>
+      {!connected && <span>Connecting...</span>}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
         <SiteSelector />
+        <span>{user.name}</span>
       </div>
     </Frame>
   </>);
