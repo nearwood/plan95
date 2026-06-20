@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator } from 'react95';
+import { WindowHeader, Button, Frame, WindowContent } from 'react95';
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
@@ -9,7 +8,7 @@ function Lobby() {
   const navigate = useNavigate();
   const { connected } = useSocket();
   const { user, logout } = useOutletContext<{ user: User; logout: () => void }>();
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  // const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   function createRoom() {
     const roomName = uniqueNamesGenerator({
@@ -23,6 +22,7 @@ function Lobby() {
     <WindowHeader className='window-title'>
       <span>Planning Poker - plan95</span>
     </WindowHeader>
+    {/* Menu bar hidden for now.
     <Toolbar className='toolbar'>
       <Button variant='menu' size='sm'>File</Button>
       <Button variant='menu' size='sm'>Edit</Button>
@@ -40,6 +40,7 @@ function Lobby() {
         </MenuList>}
       </Button>
     </Toolbar>
+    */}
     <WindowContent className='windowContent'>
       <Button onClick={createRoom}>Create Room</Button>
     </WindowContent>

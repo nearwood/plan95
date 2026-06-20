@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { WindowHeader, Button, Toolbar, Frame, WindowContent, MenuList, MenuListItem, Separator, TextInput } from 'react95';
+import { WindowHeader, Button, Frame, WindowContent, TextInput } from 'react95';
 
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
@@ -36,7 +36,7 @@ function PokerRoom() {
   const { user, logout } = useOutletContext<{ user: User; logout: () => void }>();
   const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name, user.picture);
   const { connected } = useSocket();
-  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  // const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [userData, setUserData] = useState<UserData>({});
   const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {}, issue: null });
   const [issueInput, setIssueInput] = useState('');
@@ -112,6 +112,7 @@ function PokerRoom() {
         <span className='close-icon' />
       </Button>
     </WindowHeader>
+    {/* Menu bar hidden for now.
     <Toolbar className='toolbar'>
       <Button variant='menu' size='sm'>File</Button>
       <Button variant='menu' size='sm'>Edit</Button>
@@ -129,6 +130,7 @@ function PokerRoom() {
         </MenuList>}
       </Button>
     </Toolbar>
+    */}
     <WindowContent className='windowContent pokerWindow'>
 
       {/* Top: Jira panel */}
