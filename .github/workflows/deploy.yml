@@ -45,7 +45,7 @@ jobs:
             --session-affinity
             --min-instances=0
             --max-instances=1
-            --set-env-vars=ALLOWED_ORIGIN=https://plan95.net,APP_URL=https://plan95.net,ATLASSIAN_REDIRECT_URI=https://api.plan95.net/auth/callback,JIRA_SITE_URL=palmetto.atlassian.net,NODE_ENV=production
+            --set-env-vars=ALLOWED_ORIGIN=https://plan95.net,APP_URL=https://plan95.net,ATLASSIAN_REDIRECT_URI=https://api.plan95.net/auth/callback
             --set-secrets=ATLASSIAN_CLIENT_ID=ATLASSIAN_CLIENT_ID:latest,ATLASSIAN_CLIENT_SECRET=ATLASSIAN_CLIENT_SECRET:latest,SESSION_SECRET=SESSION_SECRET:latest
 
   deploy-client:

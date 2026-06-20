@@ -10,6 +10,7 @@ import { VoteDistribution } from './VoteDistribution';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
+import { SiteSelector } from './SiteSelector';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -202,7 +203,10 @@ function PokerRoom() {
         ? <><span>Users: {numUsers}</span>{roomState.phase === 'voting' && numUsers > 0 && votedCount === numUsers && <span> · All voted!</span>}</>
         : <span>Connecting...</span>
       }
-      <Button size='sm' style={{ marginLeft: 'auto' }} onClick={logout}>{user.name}</Button>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SiteSelector />
+        <Button size='sm' onClick={logout}>{user.name}</Button>
+      </div>
     </Frame>
   </>);
 }

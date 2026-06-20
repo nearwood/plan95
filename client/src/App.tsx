@@ -41,7 +41,7 @@ const GlobalStyles = createGlobalStyle`
 `;
 
 function App() {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, login, logout, switchSite } = useAuth();
   const authError = new URLSearchParams(window.location.search).get('auth_error');
 
   return (
@@ -52,7 +52,7 @@ function App() {
           {loading
             ? null
             : user
-              ? <Outlet context={{ user, logout }} />
+              ? <Outlet context={{ user, logout, switchSite }} />
               : <LoginScreen onLogin={login} authError={authError} />
           }
         </Window>

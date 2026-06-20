@@ -2,11 +2,19 @@ import { useEffect, useState } from 'react';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3218';
 
+export interface JiraSite {
+  id: string;
+  url: string;
+  name: string;
+}
+
 export interface User {
   accountId: string;
   name: string;
   email: string;
   picture: string;
+  sites: JiraSite[];
+  cloudId: string;
 }
 
 export function useAuth() {
@@ -35,5 +43,17 @@ export function useAuth() {
       .finally(() => setUser(null));
   };
 
-  return { user, loading, login, logout };
+  const switchSite = async (cloudId: string) => {
+    const res = await fetch(`${SERVER_URL}/auth/site`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cloudId }),
+    });
+    if (res.ok) {
+      setUser(u => (u ? { ...u, cloudId } : u));
+    }
+  };
+
+  return { user, loading, login, logout, switchSite };
 }

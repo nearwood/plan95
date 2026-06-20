@@ -93,7 +93,6 @@ const ATLASSIAN_CLIENT_ID = process.env.ATLASSIAN_CLIENT_ID;
 const ATLASSIAN_CLIENT_SECRET = process.env.ATLASSIAN_CLIENT_SECRET;
 const ATLASSIAN_REDIRECT_URI = process.env.ATLASSIAN_REDIRECT_URI || 'http://localhost:3218/auth/callback';
 const APP_URL = process.env.APP_URL || 'http://localhost:5173';
-const JIRA_SITE_URL = process.env.JIRA_SITE_URL; // e.g. "palmetto.atlassian.net"
 
 const fastify = Fastify({
   logger: true
@@ -183,24 +182,26 @@ fastify.get('/auth/callback', async (req, reply) => {
   });
   const sites = await sitesRes.json();
 
-  // Pick the team's configured site, not just the first one the user happens to have.
-  const want = JIRA_SITE_URL?.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  const site = want
-    ? sites?.find((s) => s.url.replace(/^https?:\/\//, '').replace(/\/$/, '') === want)
-    : sites?.[0];
+  // A distributed app serves whatever sites the user can reach. Keep them all and
+  // default the active one to the first; the user can switch via POST /auth/site.
+  const availableSites = (Array.isArray(sites) ? sites : []).map((s) => ({
+    id: s.id,
+    url: s.url,
+    name: s.name,
+  }));
 
-  if (!site) {
-    // The user authenticated fine but can't reach the team's Jira instance.
-    fastify.log.warn(`User ${me.email} has no access to ${want ?? 'any Jira site'}`);
+  if (availableSites.length === 0) {
+    // The user authenticated fine but can't reach any Jira instance.
+    fastify.log.warn(`User ${me.email} has access to no Jira sites`);
     return reply.redirect(`${APP_URL}?auth_error=no_jira_access`);
   }
-  const cloudId = site.id;
 
   setSessionCookie(reply, {
     token: access_token,
     refreshToken: refresh_token,
     expiresAt: Date.now() + (expires_in ?? 3600) * 1000,
-    cloudId,
+    cloudId: availableSites[0].id,
+    sites: availableSites,
     user: {
       accountId: me.account_id,
       name: me.name,
@@ -221,7 +222,25 @@ fastify.get('/auth/me', async (req, reply) => {
     return reply.clearCookie('session', { path: '/' }).code(401).send({ error: 'Session expired' });
   }
   if (fresh.changed) setSessionCookie(reply, fresh.session);
-  return reply.send(fresh.session.user);
+  return reply.send({
+    ...fresh.session.user,
+    sites: fresh.session.sites ?? [],
+    cloudId: fresh.session.cloudId,
+  });
+});
+
+// Switch the active Jira site for this user's session.
+fastify.post('/auth/site', async (req, reply) => {
+  const session = openSession(req.cookies?.session);
+  if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
+
+  const { cloudId } = req.body ?? {};
+  const site = session.sites?.find((s) => s.id === cloudId);
+  if (!site) return reply.code(400).send({ error: 'Unknown site' });
+
+  session.cloudId = cloudId;
+  setSessionCookie(reply, session);
+  return reply.send({ cloudId });
 });
 
 fastify.post('/auth/logout', async (req, reply) => {

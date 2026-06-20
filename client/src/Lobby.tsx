@@ -3,6 +3,7 @@ import { WindowHeader, Button, Frame, WindowContent } from 'react95';
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
 import { useSocket } from './socketContext';
 import type { User } from './useAuth';
+import { SiteSelector } from './SiteSelector';
 
 function Lobby() {
   const navigate = useNavigate();
@@ -46,7 +47,10 @@ function Lobby() {
     </WindowContent>
     <Frame variant='well' className='footer'>
       <span>{connected ? `${user.name} · ` : 'Connecting... · '}</span>
-      <Button size='sm' onClick={logout}>Logout</Button>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SiteSelector />
+        <Button size='sm' onClick={logout}>Logout</Button>
+      </div>
     </Frame>
   </>);
 }
