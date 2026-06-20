@@ -11,7 +11,7 @@ function LoginScreen({ onLogin, authError }: { onLogin: () => void; authError?: 
 
   return (<>
     <WindowHeader className='window-title'>
-      <span>plan95</span>
+      <span><img src='/favicon.png' className='title-icon' alt='' />plan95</span>
     </WindowHeader>
     <WindowContent className='windowContent' style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
       {message && (

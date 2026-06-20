@@ -2,10 +2,6 @@ import { useEffect } from 'react';
 import { useSocket } from './socketContext';
 import { Socket } from 'socket.io-client';
 
-export const enum RoomType {
-  POKER = 'poker',
-};
-
 export const enum WebsocketClientEvents {
   WS_JOINROOM = 'joinRoom',
   WS_LEAVEROOM = 'leaveRoom',
@@ -16,10 +12,10 @@ export interface RoomHookResponse {
   roomId: string;
 }
 
-export const useRoom = (type: RoomType, name: string, username: string, picture?: string): RoomHookResponse => {
+export const useRoom = (name: string, username: string, picture?: string): RoomHookResponse => {
   const { socket, rooms, updateRooms } = useSocket();
 
-  const roomId = `${type}:${name}`;
+  const roomId = name;
 
   useEffect(() => {
     if (!socket) {
@@ -57,10 +53,10 @@ export const useRoom = (type: RoomType, name: string, username: string, picture?
       }
       updateRooms(rooms);
     };
-  }, [name, roomId, rooms, socket, type, updateRooms, username, picture]);
+  }, [name, roomId, rooms, socket, updateRooms, username, picture]);
 
   return { socket, roomId };
 };
 
 export const usePokerRoom = (roomId: string, username: string, picture?: string): RoomHookResponse =>
-  useRoom(RoomType.POKER, roomId, username, picture);
+  useRoom(roomId, username, picture);

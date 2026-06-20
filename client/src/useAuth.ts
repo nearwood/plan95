@@ -51,7 +51,9 @@ export function useAuth() {
       body: JSON.stringify({ cloudId }),
     });
     if (res.ok) {
-      setUser(u => (u ? { ...u, cloudId } : u));
+      // Reload so the socket re-handshakes with the new cloudId: room state is
+      // namespaced per instance server-side, keyed off the connection-time site.
+      window.location.reload();
     }
   };
 

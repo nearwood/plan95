@@ -284,10 +284,24 @@ fastify.post('/auth/logout', async (req, reply) => {
 // a reconnect (e.g. Cloud Run's ~5min request timeout) restores them seamlessly.
 const RECONNECT_GRACE_MS = 10_000;
 
-const userData = {};      // room -> userId -> { name, picture }
-const roomState = {};     // room -> { phase, votes: { userId: value }, issue }
-const liveSockets = {};   // room -> userId -> Set<socketId>
-const removalTimers = {}; // room -> userId -> Timeout
+const userData = {};      // nsRoom -> userId -> { name, picture }
+const roomState = {};     // nsRoom -> { phase, votes: { userId: value }, issue }
+const liveSockets = {};   // nsRoom -> userId -> Set<socketId>
+const removalTimers = {}; // nsRoom -> userId -> Timeout
+
+// Rooms are partitioned per Atlassian site (cloudId): the same room name in two
+// different instances maps to distinct server-side state and broadcast channels,
+// so a stale/guessed URL can never leak one tenant's issues or votes to another.
+// A null byte can't appear in a cloudId (UUID) or a generated room name, so it's
+// a safe separator for round-tripping the raw name back out (rawRoom).
+const ROOM_SEP = '\u0000';
+const roomKey = (cloudId, room) => `${cloudId}${ROOM_SEP}${room}`;
+const rawRoom = (nsRoom) => nsRoom.slice(nsRoom.indexOf(ROOM_SEP) + 1);
+
+// The cloudId that first opened a given room name. Joins from a different instance
+// are refused (see joinRoom / POST /issue), giving a single, explicit owner per
+// name on top of the physical partition above. Released when the room empties.
+const roomOwners = {}; // room name -> cloudId
 
 function getRoom(room) {
   if (!roomState[room]) {
@@ -316,6 +330,13 @@ fastify.post('/issue', async (req, reply) => {
   if (!key) return reply.code(400).send({ error: 'Invalid issue key or URL' });
 
   const { token, cloudId } = fresh.session;
+  // This route has no socket join to gate it, so enforce room ownership here too:
+  // a user can only load issues into a room their own instance owns. Otherwise an
+  // issue from one tenant could be broadcast into another tenant's room.
+  if (roomOwners[room] && roomOwners[room] !== cloudId) {
+    return reply.code(403).send({ error: "You don't have access to this room" });
+  }
+
   const res = await fetch(
     `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=summary,description`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
@@ -329,19 +350,24 @@ fastify.post('/issue', async (req, reply) => {
     description: data.fields.description ?? null,
   };
 
-  const state = getRoom(room);
+  roomOwners[room] = roomOwners[room] || cloudId;
+  const nsRoom = roomKey(cloudId, room);
+  const state = getRoom(nsRoom);
   state.issue = issue;
-  fastify.io.to(room).emit('roomState', state);
+  fastify.io.to(nsRoom).emit('roomState', state);
   return reply.send({ ok: true });
 });
 
-// Stable identity for a connection: the authenticated Atlassian accountId, which
-// survives reconnects (socket.id does not). Falls back to socket.id if unauthenticated.
-function userIdFromSocket(socket) {
+// Resolve a connection's identity from its session cookie at handshake time.
+// Returns null when there is no valid session so the connection can be refused;
+// accountId is a stable id that survives reconnects (socket.id does not), and
+// cloudId scopes every room this socket touches to the user's active instance.
+function sessionFromSocket(socket) {
   const cookieHeader = socket.handshake.headers.cookie || '';
   const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
   const session = openSession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
-  return session?.user?.accountId || socket.id;
+  if (!session?.user?.accountId || !session.cloudId) return null;
+  return { userId: session.user.accountId, cloudId: session.cloudId };
 }
 
 function trackSocket(room, userId, socketId) {
@@ -370,6 +396,10 @@ function untrackSocket(room, userId, socketId, { immediate } = {}) {
     delete userData[room]?.[userId];
     delete getRoom(room).votes[userId];
     if (removalTimers[room]) delete removalTimers[room][userId];
+    // Last one out releases the room name so another instance can claim it later.
+    if (userData[room] && Object.keys(userData[room]).length === 0) {
+      delete roomOwners[rawRoom(room)];
+    }
     fastify.io.to(room).emit("roomUpdate", userData[room] || {});
     fastify.io.to(room).emit("roomState", getRoom(room));
   };
@@ -383,9 +413,22 @@ function untrackSocket(room, userId, socketId, { immediate } = {}) {
 }
 
 fastify.ready().then(() => {
+  // Refuse unauthenticated sockets at the handshake: a connection with no valid
+  // session can't join rooms, cast votes, or observe issue broadcasts at all.
+  fastify.io.use((socket, next) => {
+    const identity = sessionFromSocket(socket);
+    if (!identity) return next(new Error('Unauthenticated'));
+    socket.data.userId = identity.userId;
+    socket.data.cloudId = identity.cloudId;
+    next();
+  });
+
   fastify.io.on("connection", (socket) => {
-    socket.data.userId = userIdFromSocket(socket);
     console.info('Socket connected', socket.id, 'user', socket.data.userId);
+    // Scope every client-supplied room name to this socket's instance, so two
+    // tenants using the same name never share state. socket.rooms then holds
+    // these namespaced keys, which disconnecting/leaveRoom feed straight back.
+    const key = (room) => roomKey(socket.data.cloudId, room);
 
     socket.on("message", (message) => {
       console.info('Socket message:', message);
@@ -409,64 +452,79 @@ fastify.ready().then(() => {
 
     socket.on("joinRoom", (room, username, picture) => {
       console.info(`user ${username} wants room: ${room}`);
-      const userId = socket.data.userId;
-      socket.join(room);
-      trackSocket(room, userId, socket.id);
+      const { userId, cloudId } = socket.data;
+      // A room name is owned by the first instance to open it; refuse joins from a
+      // different instance so a shared/guessed URL can't cross tenant boundaries.
+      if (roomOwners[room] && roomOwners[room] !== cloudId) {
+        console.warn(`Denied ${userId} (${cloudId}) join of "${room}" owned by ${roomOwners[room]}`);
+        fastify.io.to(socket.id).emit("joinDenied", { room });
+        return;
+      }
+      roomOwners[room] = cloudId;
 
-      userData[room] = userData[room] || {};
-      userData[room][userId] = { name: username, picture: picture || null };
-      fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
-      socket.to(room).emit("roomUpdate", userData[room]);
+      const nsRoom = key(room);
+      socket.join(nsRoom);
+      trackSocket(nsRoom, userId, socket.id);
 
-      const state = getRoom(room);
+      userData[nsRoom] = userData[nsRoom] || {};
+      userData[nsRoom][userId] = { name: username, picture: picture || null };
+      fastify.io.to(socket.id).emit("roomUpdate", userData[nsRoom]);
+      socket.to(nsRoom).emit("roomUpdate", userData[nsRoom]);
+
+      const state = getRoom(nsRoom);
       // Preserve an existing vote across reconnects; only initialize on first join.
       if (!(userId in state.votes)) state.votes[userId] = null;
       fastify.io.to(socket.id).emit("roomState", state);
-      socket.to(room).emit("roomState", state);
+      socket.to(nsRoom).emit("roomState", state);
 
-      console.log(`${Object.keys(userData[room]).length} users in ${room}`);
+      console.log(`${Object.keys(userData[nsRoom]).length} users in ${nsRoom}`);
     });
 
     socket.on("leaveRoom", (room) => {
-      console.info('socket leaving room:', room);
-      socket.leave(room);
+      const nsRoom = key(room);
+      console.info('socket leaving room:', nsRoom);
+      socket.leave(nsRoom);
       // Intentional leave — remove now (unless the user still has another tab open).
-      untrackSocket(room, socket.data.userId, socket.id, { immediate: true });
+      untrackSocket(nsRoom, socket.data.userId, socket.id, { immediate: true });
 
-      console.log(`${Object.keys(userData[room] || {}).length} users in ${room}`);
+      console.log(`${Object.keys(userData[nsRoom] || {}).length} users in ${nsRoom}`);
     });
 
     socket.on("updateUser", (room, data) => {
-      console.info('updateUser', room, data);
+      const nsRoom = key(room);
+      console.info('updateUser', nsRoom, data);
       const userId = socket.data.userId;
-      userData[room] = userData[room] || {};
-      userData[room][userId] = {
-        ...userData[room][userId],
+      userData[nsRoom] = userData[nsRoom] || {};
+      userData[nsRoom][userId] = {
+        ...userData[nsRoom][userId],
         ...data,
       };
-      fastify.io.to(socket.id).emit("roomUpdate", userData[room]);
-      socket.to(room).emit("roomUpdate", userData[room]);
+      fastify.io.to(socket.id).emit("roomUpdate", userData[nsRoom]);
+      socket.to(nsRoom).emit("roomUpdate", userData[nsRoom]);
     });
 
     socket.on("castVote", (room, value) => {
-      const state = getRoom(room);
+      const nsRoom = key(room);
+      const state = getRoom(nsRoom);
       state.votes[socket.data.userId] = value;
-      fastify.io.to(room).emit("roomState", state);
+      fastify.io.to(nsRoom).emit("roomState", state);
     });
 
     socket.on("revealVotes", (room) => {
-      const state = getRoom(room);
+      const nsRoom = key(room);
+      const state = getRoom(nsRoom);
       state.phase = 'revealed';
-      fastify.io.to(room).emit("roomState", state);
+      fastify.io.to(nsRoom).emit("roomState", state);
     });
 
     socket.on("resetVotes", (room) => {
-      const state = getRoom(room);
+      const nsRoom = key(room);
+      const state = getRoom(nsRoom);
       state.phase = 'voting';
       Object.keys(state.votes).forEach(id => {
         state.votes[id] = null;
       });
-      fastify.io.to(room).emit("roomState", state);
+      fastify.io.to(nsRoom).emit("roomState", state);
     });
   });
 });

@@ -42,6 +42,7 @@ function PokerRoom() {
   const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {}, issue: null });
   const [issueInput, setIssueInput] = useState('');
   const [issueError, setIssueError] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
   const navigate = useNavigate();
 
   const numUsers = Object.keys(userData).length;
@@ -66,14 +67,21 @@ function PokerRoom() {
     setRoomState(state);
   }, []);
 
+  // The server refuses joins to a room owned by a different Atlassian instance.
+  const handleJoinDenied = useCallback(() => {
+    setDenied(true);
+  }, []);
+
   useEffect(() => {
     roomSocket?.on('roomUpdate', handleRoomUpdate);
     roomSocket?.on('roomState', handleRoomState);
+    roomSocket?.on('joinDenied', handleJoinDenied);
     return () => {
       roomSocket?.off('roomUpdate', handleRoomUpdate);
       roomSocket?.off('roomState', handleRoomState);
+      roomSocket?.off('joinDenied', handleJoinDenied);
     };
-  }, [roomSocket, handleRoomUpdate, handleRoomState]);
+  }, [roomSocket, handleRoomUpdate, handleRoomState, handleJoinDenied]);
 
   const castVote = (value: string) => {
     const newValue = myVote === value ? null : value;
@@ -106,9 +114,24 @@ function PokerRoom() {
     navigate('/');
   }
 
+  if (denied) {
+    return (<>
+      <WindowHeader className='window-title'>
+        <span><img src='/favicon.png' className='title-icon' alt='' />Plan95 - Planning Poker</span>
+        <Button onClick={goToLobby}>
+          <span className='close-icon' />
+        </Button>
+      </WindowHeader>
+      <WindowContent className='windowContent'>
+        <p>You don't have access to this room.</p>
+        <Button onClick={goToLobby}>Back to Lobby</Button>
+      </WindowContent>
+    </>);
+  }
+
   return (<>
     <WindowHeader className='window-title'>
-      <span>Plan95 - Planning Poker - {roomName}</span>
+      <span><img src='/favicon.png' className='title-icon' alt='' />Plan95 - Planning Poker - {roomName}</span>
       <Button onClick={goToLobby}>
         <span className='close-icon' />
       </Button>

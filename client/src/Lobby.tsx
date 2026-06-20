@@ -21,7 +21,7 @@ function Lobby() {
 
   return (<>
     <WindowHeader className='window-title'>
-      <span>Planning Poker - plan95</span>
+      <span><img src='/favicon.png' className='title-icon' alt='' />Planning Poker - plan95</span>
     </WindowHeader>
     <MenuBar inLobby />
     <WindowContent className='windowContent'>

@@ -5,6 +5,13 @@
   align-items: center;
   justify-content: space-between;
 }
+.title-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
 .close-icon {
   display: inline-block;
   width: 16px;
