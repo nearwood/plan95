@@ -450,7 +450,7 @@ fastify.ready().then(() => {
       }
     });
 
-    socket.on("joinRoom", (room, username, picture) => {
+    socket.on("joinRoom", (room, username, picture, cursorImage) => {
       console.info(`user ${username} wants room: ${room}`);
       const { userId, cloudId } = socket.data;
       // A room name is owned by the first instance to open it; refuse joins from a
@@ -467,7 +467,7 @@ fastify.ready().then(() => {
       trackSocket(nsRoom, userId, socket.id);
 
       userData[nsRoom] = userData[nsRoom] || {};
-      userData[nsRoom][userId] = { name: username, picture: picture || null };
+      userData[nsRoom][userId] = { name: username, picture: picture || null, cursorImage: cursorImage || null };
       fastify.io.to(socket.id).emit("roomUpdate", userData[nsRoom]);
       socket.to(nsRoom).emit("roomUpdate", userData[nsRoom]);
 
@@ -501,6 +501,16 @@ fastify.ready().then(() => {
       };
       fastify.io.to(socket.id).emit("roomUpdate", userData[nsRoom]);
       socket.to(nsRoom).emit("roomUpdate", userData[nsRoom]);
+    });
+
+    // Pure relay for the mouse-follower effect: not persisted, since a stale
+    // position is meaningless after a reconnect. pos is { x, y } as fractions of
+    // the table's box, or null when the sender's mouse left it. socket.to (not
+    // fastify.io.to) so it never echoes back to the sender, who already renders
+    // their own cursor locally.
+    socket.on("cursorMove", (room, pos) => {
+      const nsRoom = key(room);
+      socket.to(nsRoom).emit("cursorUpdate", socket.data.userId, pos);
     });
 
     socket.on("castVote", (room, value) => {

@@ -146,4 +146,16 @@
   min-height: 480px;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.cursorFollower {
+  position: absolute;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
 }
