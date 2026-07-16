@@ -22,12 +22,13 @@ import cursorTeal from './assets/cursors/teal.png';
 import cursorOrange from './assets/cursors/orange.png';
 import cursorPurple from './assets/cursors/purple.png';
 import cursorCoffee from './assets/cursors/coffee.svg';
+import cursorWhiskey from './assets/cursors/whiskey_tumbler.svg';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3218';
 
 // Each session's follower image is a random pick made once at load; duplicates
 // across users are fine, so there's nothing to coordinate server-side.
-const CURSOR_IMAGES = [cursorRed, cursorTeal, cursorOrange, cursorPurple, cursorCoffee];
+const CURSOR_IMAGES = [cursorRed, cursorTeal, cursorOrange, cursorPurple, cursorCoffee, cursorWhiskey];
 
 // Caps how often we broadcast our position (not how often we render our own
 // follower, which stays instant/local).
