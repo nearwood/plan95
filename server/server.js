@@ -368,10 +368,10 @@ function sessionFromSocket(socket) {
   const session = openSession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
   if (!session?.user?.accountId || !session.cloudId) return null;
 
-  // Dev-only: the client assigns each tab a random id (see devUser.ts) to
-  // simulate a distinct user from the same real login, so one login + multiple
-  // tabs can act as multiple players. cloudId is left untouched so
-  // room-ownership checks still pass.
+  // Dev-only: the Bot Lab page (client/src/BotLab.tsx) assigns each simulated
+  // voter its own id here, so a batch of bots can join a room as distinct
+  // players under one real login. cloudId is left untouched so room-ownership
+  // checks still pass.
   const devUser = !IS_PROD && socket.handshake.query.devUser;
   const userId = devUser ? `${session.user.accountId}:${devUser}` : session.user.accountId;
 

@@ -10,6 +10,7 @@ import {
 import App from './App.tsx';
 import PokerRoom from './PokerRoom.tsx';
 import Lobby from './Lobby.tsx';
+import BotLab from './BotLab.tsx';
 
 // Handle GitHub Pages 404 redirect
 const redirectPath = new URLSearchParams(window.location.search).get('p');
@@ -29,6 +30,10 @@ const router = createBrowserRouter([
       {
         path: "poker/:roomName",
         element: <PokerRoom />,
+      },
+      {
+        path: "dev/bots/:roomName",
+        element: <BotLab />,
       }
     ]
   },
