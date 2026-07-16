@@ -13,6 +13,7 @@ import { AvatarStack } from './AvatarStack';
 import { SiteSelector } from './SiteSelector';
 import { MenuBar } from './MenuBar';
 import { CursorFollower } from './CursorFollower';
+import { getDevUser } from './devUser';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -73,7 +74,11 @@ function PokerRoom() {
 
   const numUsers = Object.keys(userData).length;
   // Identify our own vote by stable account id (survives socket reconnects).
-  const myVote = roomState.votes[user.accountId] ?? null;
+  // devUser mirrors the server's dev-only identity suffix (see sessionFromSocket)
+  // so multiple tabs under one real login act as distinct players locally too.
+  const devUser = getDevUser();
+  const myAccountId = devUser ? `${user.accountId}:${devUser}` : user.accountId;
+  const myVote = roomState.votes[myAccountId] ?? null;
   const votedCount = Object.values(roomState.votes).filter(v => v !== null).length;
 
   const numericVotes = roomState.phase === 'revealed'

@@ -367,7 +367,15 @@ function sessionFromSocket(socket) {
   const sessionCookie = cookieHeader.match(/(?:^|;\s*)session=([^;]+)/)?.[1];
   const session = openSession(sessionCookie ? decodeURIComponent(sessionCookie) : null);
   if (!session?.user?.accountId || !session.cloudId) return null;
-  return { userId: session.user.accountId, cloudId: session.cloudId };
+
+  // Dev-only: the client assigns each tab a random id (see devUser.ts) to
+  // simulate a distinct user from the same real login, so one login + multiple
+  // tabs can act as multiple players. cloudId is left untouched so
+  // room-ownership checks still pass.
+  const devUser = !IS_PROD && socket.handshake.query.devUser;
+  const userId = devUser ? `${session.user.accountId}:${devUser}` : session.user.accountId;
+
+  return { userId, cloudId: session.cloudId };
 }
 
 function trackSocket(room, userId, socketId) {

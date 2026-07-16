@@ -2,6 +2,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getDevUser } from './devUser';
 
 let socket: Socket | null = null;
 const rooms = {};
@@ -48,6 +49,7 @@ export const SocketProvider: React.FC<Props> = ({ children }) => {
     socket = io(host, {
       transports: ['websocket'],
       withCredentials: true,
+      query: { devUser: getDevUser() || '' },
     });
 
     setSocketState(socket);
