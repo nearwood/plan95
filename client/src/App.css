@@ -159,3 +159,11 @@
   pointer-events: none;
   z-index: 10;
 }
+
+.chipFollower {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  pointer-events: none;
+  z-index: 10;
+}

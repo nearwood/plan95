@@ -125,10 +125,12 @@ export function CardPile({ userData, roomState }: { userData: UserData; roomStat
   useEffect(() => {
     // Celebrate consensus on the voting -> revealed transition.
     if (roomState.phase === 'revealed' && confettiPhaseRef.current === 'voting') {
-      const userIds = Object.keys(userData);
-      const allVoted = userIds.length > 0 && userIds.every(id => roomState.votes[id] != null);
-      const votes = userIds.map(id => roomState.votes[id]);
-      const consensus = allVoted && votes.every(v => v === votes[0]);
+      // Users who never voted don't count against consensus — only compare
+      // among those who actually cast a vote.
+      const castVotes = Object.keys(userData)
+        .map(id => roomState.votes[id])
+        .filter((v): v is string => v != null);
+      const consensus = castVotes.length > 0 && castVotes.every(v => v === castVotes[0]);
       if (consensus) {
         // Wait for the staggered flips (max delay + flip duration) before the burst.
         const t = setTimeout(() => fireConsensusConfetti(containerRef.current?.getBoundingClientRect() ?? null), 280 + 500);
