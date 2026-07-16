@@ -2,11 +2,11 @@ import React from 'react';
 import cardBack from '/cardback.png';
 import cardFaces from '/win95cards.png';
 
-const CARD_W = 71;
-const CARD_H = 96;
+export const CARD_W = 71;
+export const CARD_H = 96;
 
 // [col, row] in the 4×13 sprite sheet (Hearts, Clubs, Diamonds, Spades)
-const POKER_CARD_MAP: Record<string, [number, number]> = {
+export const POKER_CARD_MAP: Record<string, [number, number]> = {
   '1':  [0, 0],   // Ace of Hearts
   '2':  [0, 1],   // 2 of Hearts
   '3':  [0, 2],   // 3 of Hearts

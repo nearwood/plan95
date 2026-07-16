@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import confetti from 'canvas-confetti';
 import { PlayingCard } from './PlayingCard';
+import {
+  Avatar, ExitCard, CascadeCanvas, seeded, hashStr,
+  EXIT_ANIMS, EXIT_DURATION,
+  type PileEntry, type ExitState,
+} from './PileExitAnimations';
 
 interface UserData {
   [socketId: string]: { name: string; picture: string | null };
@@ -10,28 +16,16 @@ interface RoomState {
   votes: Record<string, string | null>;
 }
 
-interface PileEntry {
-  socketId: string;
-  picture: string | null;
-  name: string;
-  pileAngle: number;
-  pileX: number;
-  pileY: number;
-  startX: number;
-  startY: number;
+// Fire a celebratory confetti burst centered over the given element.
+function fireConsensusConfetti(rect: DOMRect | null) {
+  const origin = rect
+    ? { x: (rect.left + rect.width / 2) / window.innerWidth, y: (rect.top + rect.height / 2) / window.innerHeight }
+    : { x: 0.5, y: 0.5 };
+  confetti({ particleCount: 120, spread: 70, startVelocity: 45, origin, zIndex: 9999 });
+  setTimeout(() => confetti({ particleCount: 60, spread: 110, startVelocity: 35, origin, zIndex: 9999 }), 150);
 }
 
-function seeded(seed: number, index: number, min: number, max: number): number {
-  const x = Math.sin(seed * 9301 + index * 49297 + 233720) * 10000;
-  const r = x - Math.floor(x);
-  return min + r * (max - min);
-}
-
-function hashStr(str: string): number {
-  return str.split('').reduce((acc, c) => ((acc << 5) - acc + c.charCodeAt(0)) | 0, 0);
-}
-
-function makePileEntry(socketId: string, user: { name: string; picture: string | null }): PileEntry {
+function makePileEntry(socketId: string, user: { name: string; picture: string | null }, vote: string): PileEntry {
   const seed = Math.abs(hashStr(socketId));
   const side = Math.floor(seeded(seed, 0, 0, 4)); // 0=left,1=right,2=top,3=bottom
   const startX = side === 0 ? -500 : side === 1 ? 500 : seeded(seed, 1, -200, 200);
@@ -40,11 +34,13 @@ function makePileEntry(socketId: string, user: { name: string; picture: string |
     socketId,
     picture: user.picture,
     name: user.name,
+    vote,
     pileAngle: seeded(seed, 3, -18, 18),
     pileX: seeded(seed, 4, -28, 28),
     pileY: seeded(seed, 5, -20, 20),
     startX,
     startY,
+    flipDelay: seeded(seed, 6, 0, 280),
   };
 }
 
@@ -65,52 +61,27 @@ function PileCard({ entry, vote, phase }: { entry: PileEntry; vote: string | nul
       transform,
       transition: entered ? 'transform 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none',
     }}>
-      <div style={{ position: 'relative', width: 71, height: 96 }}>
-        <PlayingCard
-          faceDown={phase === 'voting'}
-          value={phase === 'revealed' ? (vote ?? undefined) : undefined}
-        />
-        {entry.picture ? (
-          <img
-            src={entry.picture}
-            alt={entry.name}
-            title={entry.name}
-            style={{
-              position: 'absolute',
-              bottom: 8,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              border: '2px solid rgba(255,255,255,0.8)',
-              objectFit: 'cover',
-            }}
+      <div style={{ position: 'relative', width: 71, height: 96, perspective: 700 }}>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          transformStyle: 'preserve-3d',
+          transform: phase === 'revealed' ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          transition: 'transform 0.5s cubic-bezier(0.2, 0.7, 0.3, 1.2)',
+          transitionDelay: phase === 'revealed' ? `${entry.flipDelay}ms` : '0ms',
+        }}>
+          {/* Back face — shown while face-down */}
+          <PlayingCard
+            faceDown
+            style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
           />
-        ) : (
-          <div
-            title={entry.name}
-            style={{
-              position: 'absolute',
-              bottom: 8,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              border: '2px solid rgba(255,255,255,0.8)',
-              background: '#555',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 'bold',
-            }}
-          >
-            {entry.name?.[0]?.toUpperCase() ?? '?'}
-          </div>
-        )}
+          {/* Front face — pre-rotated 180° so it reads correctly after the flip */}
+          <PlayingCard
+            value={vote ?? undefined}
+            style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+          />
+        </div>
+        <Avatar picture={entry.picture} name={entry.name} />
       </div>
     </div>
   );
@@ -118,16 +89,55 @@ function PileCard({ entry, vote, phase }: { entry: PileEntry; vote: string | nul
 
 export function CardPile({ userData, roomState }: { userData: UserData; roomState: RoomState }) {
   const [entries, setEntries] = useState<PileEntry[]>([]);
+  const [exiting, setExiting] = useState<ExitState | null>(null);
   const prevPhaseRef = useRef(roomState.phase);
+  const confettiPhaseRef = useRef(roomState.phase);
+  const exitKeyRef = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Clear pile on reset (phase goes back to voting with null votes)
+    // On reset (revealed -> voting with all votes cleared), sweep the placed
+    // cards off the table with a randomly chosen retro exit animation.
     const allNull = Object.values(roomState.votes).every(v => v === null);
     if (roomState.phase === 'voting' && prevPhaseRef.current === 'revealed' && allNull) {
+      if (entries.length > 0) {
+        const anim = EXIT_ANIMS[Math.floor(Math.random() * EXIT_ANIMS.length)];
+        setExiting({ entries, anim, duration: EXIT_DURATION[anim], key: exitKeyRef.current++ });
+      }
       setEntries([]);
     }
     prevPhaseRef.current = roomState.phase;
-  }, [roomState.phase, roomState.votes]);
+  }, [roomState.phase, roomState.votes, entries]);
+
+  // Keep the exit layer mounted only for its animation's lifetime.
+  useEffect(() => {
+    if (!exiting) return;
+    const t = setTimeout(() => setExiting(null), exiting.duration);
+    return () => clearTimeout(t);
+  }, [exiting]);
+
+  // A fresh vote means the next round has begun — kill any in-flight exit
+  // animation so the new card is the only thing on the table.
+  useEffect(() => {
+    if (exiting && entries.length > 0) setExiting(null);
+  }, [entries, exiting]);
+
+  useEffect(() => {
+    // Celebrate consensus on the voting -> revealed transition.
+    if (roomState.phase === 'revealed' && confettiPhaseRef.current === 'voting') {
+      const userIds = Object.keys(userData);
+      const allVoted = userIds.length > 0 && userIds.every(id => roomState.votes[id] != null);
+      const votes = userIds.map(id => roomState.votes[id]);
+      const consensus = allVoted && votes.every(v => v === votes[0]);
+      if (consensus) {
+        // Wait for the staggered flips (max delay + flip duration) before the burst.
+        const t = setTimeout(() => fireConsensusConfetti(containerRef.current?.getBoundingClientRect() ?? null), 280 + 500);
+        confettiPhaseRef.current = roomState.phase;
+        return () => clearTimeout(t);
+      }
+    }
+    confettiPhaseRef.current = roomState.phase;
+  }, [roomState.phase, roomState.votes, userData]);
 
   useEffect(() => {
     setEntries(prev => {
@@ -138,10 +148,13 @@ export function CardPile({ userData, roomState }: { userData: UserData; roomStat
         userData[e.socketId] && roomState.votes[e.socketId] !== null && roomState.votes[e.socketId] !== undefined
       );
 
+      // Keep stored vote in sync with the current (non-null) vote
+      next = next.map(e => ({ ...e, vote: roomState.votes[e.socketId] ?? e.vote }));
+
       // Add entries for newly voted users
       Object.entries(roomState.votes).forEach(([socketId, vote]) => {
         if (vote !== null && vote !== undefined && userData[socketId] && !next.find(e => e.socketId === socketId)) {
-          next.push(makePileEntry(socketId, userData[socketId]));
+          next.push(makePileEntry(socketId, userData[socketId], vote));
         }
       });
 
@@ -150,7 +163,7 @@ export function CardPile({ userData, roomState }: { userData: UserData; roomStat
   }, [roomState.votes, userData]);
 
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       position: 'relative',
       flex: 1,
       display: 'flex',
@@ -158,6 +171,14 @@ export function CardPile({ userData, roomState }: { userData: UserData; roomStat
       justifyContent: 'center',
       overflow: 'hidden',
     }}>
+      {/* Exit animation layer (behind live cards, torn down when a new vote lands) */}
+      {exiting && exiting.anim === 'cascade' && (
+        <CascadeCanvas key={exiting.key} entries={exiting.entries} />
+      )}
+      {exiting && exiting.anim !== 'cascade' && exiting.entries.map((entry, i) => (
+        <ExitCard key={`${exiting.key}-${entry.socketId}`} entry={entry} anim={exiting.anim as 'sweep' | 'blast'} index={i} />
+      ))}
+
       {entries.map(entry => (
         <PileCard
           key={entry.socketId}
