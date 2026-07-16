@@ -310,6 +310,10 @@ function getRoom(room) {
   return roomState[room];
 }
 
+// Matches "Story Points" (classic projects) and "Story point estimate"
+// (team-managed projects) - the two names Jira Cloud uses for this custom field.
+const isStoryPointsFieldName = (name) => /^story point/i.test(name);
+
 // Load a Jira issue into a room. This lives on HTTP (not the websocket) so it can
 // refresh the access token and re-set the session cookie on its way through; the
 // resulting issue is broadcast to the room over socket.io like any other update.
@@ -338,16 +342,21 @@ fastify.post('/issue', async (req, reply) => {
   }
 
   const res = await fetch(
-    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=summary,description`,
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=*navigable&expand=names`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
   );
   if (!res.ok) return reply.code(502).send({ error: `Could not load ${key}` });
 
   const data = await res.json();
+  // Story Points is a per-site custom field ("Story Points" on classic projects,
+  // "Story point estimate" on team-managed), so resolve its id from the field
+  // name map rather than hardcoding a customfield_XXXXX.
+  const storyPointsFieldId = Object.entries(data.names ?? {}).find(([, name]) => isStoryPointsFieldName(name))?.[0];
   const issue = {
     key: data.key,
     summary: data.fields.summary,
     description: data.fields.description ?? null,
+    storyPoints: storyPointsFieldId ? data.fields[storyPointsFieldId] ?? null : null,
   };
 
   roomOwners[room] = roomOwners[room] || cloudId;
@@ -387,16 +396,15 @@ fastify.post('/issue/points', async (req, reply) => {
   if (!state.issue) return reply.code(400).send({ error: 'No issue loaded' });
   const { key } = state.issue;
 
-  // Story Points lives in a per-site custom field ("Story Points" on classic
-  // projects, "Story point estimate" on team-managed projects), so resolve its
-  // id from this issue's edit screen rather than hardcoding a customfield_XXXXX.
+  // Resolve the Story Points field id from this issue's edit screen rather than
+  // hardcoding a customfield_XXXXX (see isStoryPointsFieldName).
   const metaRes = await fetch(
     `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}/editmeta`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
   );
   if (!metaRes.ok) return reply.code(502).send({ error: `Could not load edit metadata for ${key}` });
   const meta = await metaRes.json();
-  const fieldId = Object.entries(meta.fields ?? {}).find(([, f]) => /^story point/i.test(f.name))?.[0];
+  const fieldId = Object.entries(meta.fields ?? {}).find(([, f]) => isStoryPointsFieldName(f.name))?.[0];
   if (!fieldId) return reply.code(422).send({ error: `${key} has no Story Points field on its edit screen` });
 
   const putRes = await fetch(

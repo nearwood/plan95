@@ -43,6 +43,7 @@ interface JiraIssue {
   key: string;
   summary: string;
   description: object | null;
+  storyPoints: number | null;
 }
 
 interface RoomState {
@@ -151,11 +152,16 @@ function PokerRoom() {
     });
   }, [userData]);
 
-  // Pre-fill the points box with the nearest deck value once a round reveals,
-  // and clear any stale value/status once voting resumes or a different issue
-  // is loaded.
+  // Pre-fill the points box: with the issue's existing Story Points when a new
+  // issue loads, with the nearest deck value to the average once a round
+  // reveals, or blank once voting resumes (New Round).
+  const prevIssueKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (roomState.phase === 'revealed') {
+    const issueKey = roomState.issue?.key ?? null;
+    if (issueKey !== prevIssueKeyRef.current) {
+      prevIssueKeyRef.current = issueKey;
+      setPointsInput(roomState.issue?.storyPoints != null ? String(roomState.issue.storyPoints) : '');
+    } else if (roomState.phase === 'revealed') {
       setPointsInput(average ? nearestCardValue(Number(average)) : '');
     } else {
       setPointsInput('');
