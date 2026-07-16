@@ -65,8 +65,11 @@ function PokerRoom() {
   const [issueInput, setIssueInput] = useState('');
   const [issueError, setIssueError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
-  const [ownCursor, setOwnCursor] = useState<CursorPos | null>(null);
-  const [remoteCursors, setRemoteCursors] = useState<Record<string, CursorPos>>({});
+  // Position is kept even while hidden (visible: false) so followers stay
+  // mounted at all times instead of unmounting/remounting their <img> on
+  // every on/off-table transition, which otherwise re-triggers image loads.
+  const [ownCursor, setOwnCursor] = useState<{ pos: CursorPos; visible: boolean }>({ pos: { x: 0.5, y: 0.5 }, visible: false });
+  const [remoteCursors, setRemoteCursors] = useState<Record<string, { pos: CursorPos; visible: boolean }>>({});
   const lastCursorEmitRef = useRef(0);
   const cursorHiddenRef = useRef(false);
   const roundControlsRef = useRef<HTMLDivElement>(null);
@@ -106,12 +109,10 @@ function PokerRoom() {
   const handleCursorUpdate = useCallback((userId: string, pos: CursorPos | null) => {
     setRemoteCursors(prev => {
       if (!pos) {
-        if (!(userId in prev)) return prev;
-        const next = { ...prev };
-        delete next[userId];
-        return next;
+        if (!prev[userId]?.visible) return prev;
+        return { ...prev, [userId]: { pos: prev[userId].pos, visible: false } };
       }
-      return { ...prev, [userId]: pos };
+      return { ...prev, [userId]: { pos, visible: true } };
     });
   }, []);
 
@@ -133,10 +134,10 @@ function PokerRoom() {
   useEffect(() => {
     setRemoteCursors(prev => {
       let changed = false;
-      const next: Record<string, CursorPos> = {};
-      for (const [userId, pos] of Object.entries(prev)) {
+      const next: Record<string, { pos: CursorPos; visible: boolean }> = {};
+      for (const [userId, entry] of Object.entries(prev)) {
         if (userData[userId]) {
-          next[userId] = pos;
+          next[userId] = entry;
         } else {
           changed = true;
         }
@@ -152,7 +153,7 @@ function PokerRoom() {
     if (controlsBottom !== undefined && e.clientY >= controlsBottom) {
       if (!cursorHiddenRef.current) {
         cursorHiddenRef.current = true;
-        setOwnCursor(null);
+        setOwnCursor(prev => ({ ...prev, visible: false }));
         roomSocket?.emit('cursorMove', roomId, null);
       }
       return;
@@ -164,7 +165,7 @@ function PokerRoom() {
       x: (e.clientX - rect.left) / rect.width,
       y: (e.clientY - rect.top) / rect.height,
     };
-    setOwnCursor(pos);
+    setOwnCursor({ pos, visible: true });
 
     const now = Date.now();
     if (now - lastCursorEmitRef.current >= CURSOR_EMIT_INTERVAL_MS) {
@@ -175,7 +176,7 @@ function PokerRoom() {
 
   const handleTableMouseLeave = useCallback(() => {
     cursorHiddenRef.current = false;
-    setOwnCursor(null);
+    setOwnCursor(prev => ({ ...prev, visible: false }));
     roomSocket?.emit('cursorMove', roomId, null);
   }, [roomSocket, roomId]);
 
@@ -263,15 +264,18 @@ function PokerRoom() {
       {/* Bottom: Poker table */}
       <div className='pokerBottom' onMouseMove={handleTableMouseMove} onMouseLeave={handleTableMouseLeave}>
 
-        {ownCursor && (CHIP_CURSOR_IMAGES.includes(cursorImage)
-          ? <ChipsCursorFollower x={ownCursor.x} y={ownCursor.y} image={cursorImage} />
-          : <CursorFollower x={ownCursor.x} y={ownCursor.y} image={cursorImage} />)}
-        {Object.entries(remoteCursors).map(([userId, pos]) => {
-          const image = userData[userId]?.cursorImage;
+        {CHIP_CURSOR_IMAGES.includes(cursorImage)
+          ? <ChipsCursorFollower x={ownCursor.pos.x} y={ownCursor.pos.y} image={cursorImage} visible={ownCursor.visible} />
+          : <CursorFollower x={ownCursor.pos.x} y={ownCursor.pos.y} image={cursorImage} visible={ownCursor.visible} />}
+        {Object.entries(userData).map(([userId, data]) => {
+          const image = data.cursorImage;
           if (!image) return null;
+          const entry = remoteCursors[userId];
+          const pos = entry?.pos ?? { x: 0.5, y: 0.5 };
+          const visible = entry?.visible ?? false;
           return CHIP_CURSOR_IMAGES.includes(image)
-            ? <ChipsCursorFollower key={userId} x={pos.x} y={pos.y} image={image} />
-            : <CursorFollower key={userId} x={pos.x} y={pos.y} image={image} />;
+            ? <ChipsCursorFollower key={userId} x={pos.x} y={pos.y} image={image} visible={visible} />
+            : <CursorFollower key={userId} x={pos.x} y={pos.y} image={image} visible={visible} />;
         })}
 
         {/* Avatar stack */}

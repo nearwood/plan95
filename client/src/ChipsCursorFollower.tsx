@@ -31,9 +31,10 @@ interface ChipsCursorFollowerProps {
   x: number; // fraction (0-1) of the containing table's width
   y: number; // fraction (0-1) of the containing table's height
   image: string; // the single chip color used for every chip in the group
+  visible: boolean;
 }
 
-export function ChipsCursorFollower({ x, y, image }: ChipsCursorFollowerProps) {
+export function ChipsCursorFollower({ x, y, image, visible }: ChipsCursorFollowerProps) {
   const targetRef = useRef({ x, y });
   const chipElsRef = useRef<(HTMLImageElement | null)[]>([]);
   const posRef = useRef(CHIPS.map(() => ({ x, y })));
@@ -82,6 +83,7 @@ export function ChipsCursorFollower({ x, y, image }: ChipsCursorFollowerProps) {
           className='chipFollower'
           src={image}
           alt=''
+          style={{ visibility: visible ? 'visible' : 'hidden' }}
         />
       ))}
     </>
