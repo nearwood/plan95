@@ -292,6 +292,18 @@ function PokerRoom() {
             style={{ flex: 1 }}
           />
           <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
+          <TextInput
+            value={pointsInput}
+            onChange={(e: any) => {
+              setPointsInput(e.target.value);
+              setPointsSaved(false);
+              setPointsSaveError(null);
+            }}
+            onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
+            disabled={!roomState.issue}
+            style={{ width: 70 }}
+          />
+          <Button onClick={savePoints} disabled={!roomState.issue || !pointsInput || pointsSaving}>💾</Button>
         </div>
         {roomState.issue && (
           <div>
@@ -304,6 +316,8 @@ function PokerRoom() {
           </div>
         )}
         {issueError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{issueError}</p>}
+        {pointsSaveError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{pointsSaveError}</p>}
+        {pointsSaved && <p style={{ margin: '4px 0 0', fontSize: 12 }}>Saved</p>}
       </div>
 
       {/* Bottom: Poker table */}
@@ -343,25 +357,6 @@ function PokerRoom() {
           <p style={{ margin: '0 0 12px', color: '#fff', textShadow: '1px 1px 0 #000', position: 'relative', zIndex: 20 }}>
             {average ? <>Average: <strong>{average}</strong></> : 'No numeric votes'}
           </p>
-        )}
-
-        {/* Save winning points back to the loaded issue */}
-        {roomState.phase === 'revealed' && roomState.issue && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', position: 'relative', zIndex: 20 }}>
-            <TextInput
-              value={pointsInput}
-              onChange={(e: any) => {
-                setPointsInput(e.target.value);
-                setPointsSaved(false);
-                setPointsSaveError(null);
-              }}
-              onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
-              style={{ width: 70 }}
-            />
-            <Button onClick={savePoints} disabled={!pointsInput || pointsSaving}>💾</Button>
-            {pointsSaved && <span style={{ color: '#fff', textShadow: '1px 1px 0 #000' }}>Saved</span>}
-            {pointsSaveError && <span style={{ color: '#ff4444', fontSize: 12 }}>{pointsSaveError}</span>}
-          </div>
         )}
 
         {/* Round controls */}
