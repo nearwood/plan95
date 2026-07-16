@@ -13,22 +13,21 @@ import { AvatarStack } from './AvatarStack';
 import { SiteSelector } from './SiteSelector';
 import { MenuBar } from './MenuBar';
 import { CursorFollower } from './CursorFollower';
+import { ChipsCursorFollower, CHIP_CURSOR_IMAGES } from './ChipsCursorFollower';
 import { getDevUser } from './devUser';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
-import cursorRed from './assets/cursors/red.png';
-import cursorTeal from './assets/cursors/teal.png';
-import cursorOrange from './assets/cursors/orange.png';
-import cursorPurple from './assets/cursors/purple.png';
 import cursorCoffee from './assets/cursors/coffee.svg';
 import cursorWhiskey from './assets/cursors/whiskey_tumbler.svg';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3218';
 
 // Each session's follower image is a random pick made once at load; duplicates
-// across users are fine, so there's nothing to coordinate server-side.
-const CURSOR_IMAGES = [cursorRed, cursorTeal, cursorOrange, cursorPurple, cursorCoffee, cursorWhiskey];
+// across users are fine, so there's nothing to coordinate server-side. Chip
+// colors are included individually so a session lands on one color, which
+// also tells us to render the trailing chip group instead of a single image.
+const CURSOR_IMAGES = [cursorCoffee, cursorWhiskey, ...CHIP_CURSOR_IMAGES];
 
 // Caps how often we broadcast our position (not how often we render our own
 // follower, which stays instant/local).
@@ -264,10 +263,15 @@ function PokerRoom() {
       {/* Bottom: Poker table */}
       <div className='pokerBottom' onMouseMove={handleTableMouseMove} onMouseLeave={handleTableMouseLeave}>
 
-        {ownCursor && <CursorFollower x={ownCursor.x} y={ownCursor.y} image={cursorImage} />}
+        {ownCursor && (CHIP_CURSOR_IMAGES.includes(cursorImage)
+          ? <ChipsCursorFollower x={ownCursor.x} y={ownCursor.y} image={cursorImage} />
+          : <CursorFollower x={ownCursor.x} y={ownCursor.y} image={cursorImage} />)}
         {Object.entries(remoteCursors).map(([userId, pos]) => {
           const image = userData[userId]?.cursorImage;
-          return image ? <CursorFollower key={userId} x={pos.x} y={pos.y} image={image} /> : null;
+          if (!image) return null;
+          return CHIP_CURSOR_IMAGES.includes(image)
+            ? <ChipsCursorFollower key={userId} x={pos.x} y={pos.y} image={image} />
+            : <CursorFollower key={userId} x={pos.x} y={pos.y} image={image} />;
         })}
 
         {/* Avatar stack */}
