@@ -15,6 +15,7 @@ import { MenuBar } from './MenuBar';
 import { CursorFollower } from './CursorFollower';
 import { ChipsCursorFollower, CHIP_CURSOR_IMAGES } from './ChipsCursorFollower';
 import { getDevUser } from './devUser';
+import { nearestCardValue } from './pokerValues';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -70,6 +71,10 @@ function PokerRoom() {
   // every on/off-table transition, which otherwise re-triggers image loads.
   const [ownCursor, setOwnCursor] = useState<{ pos: CursorPos; visible: boolean }>({ pos: { x: 0.5, y: 0.5 }, visible: false });
   const [remoteCursors, setRemoteCursors] = useState<Record<string, { pos: CursorPos; visible: boolean }>>({});
+  const [pointsInput, setPointsInput] = useState('');
+  const [pointsSaving, setPointsSaving] = useState(false);
+  const [pointsSaveError, setPointsSaveError] = useState<string | null>(null);
+  const [pointsSaved, setPointsSaved] = useState(false);
   const lastCursorEmitRef = useRef(0);
   const cursorHiddenRef = useRef(false);
   const roundControlsRef = useRef<HTMLDivElement>(null);
@@ -146,6 +151,20 @@ function PokerRoom() {
     });
   }, [userData]);
 
+  // Pre-fill the points box with the nearest deck value once a round reveals,
+  // and clear any stale value/status once voting resumes or a different issue
+  // is loaded.
+  useEffect(() => {
+    if (roomState.phase === 'revealed') {
+      setPointsInput(average ? nearestCardValue(Number(average)) : '');
+    } else {
+      setPointsInput('');
+    }
+    setPointsSaveError(null);
+    setPointsSaved(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomState.phase, roomState.issue?.key]);
+
   const handleTableMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     // Below the reveal/new-round button is the card-picking zone: hide the
     // follower there so nobody can watch you home in on a card before you vote.
@@ -204,6 +223,32 @@ function PokerRoom() {
       // On success the new issue arrives via the roomState socket broadcast.
     } catch {
       setIssueError('Could not load issue');
+    }
+  };
+
+  const savePoints = async () => {
+    const points = Number(pointsInput.trim());
+    if (!Number.isFinite(points)) return;
+    setPointsSaving(true);
+    setPointsSaveError(null);
+    setPointsSaved(false);
+    try {
+      const res = await fetch(`${SERVER_URL}/issue/points`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: roomId, points }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPointsSaveError(data.error || 'Could not save points');
+      } else {
+        setPointsSaved(true);
+      }
+    } catch {
+      setPointsSaveError('Could not save points');
+    } finally {
+      setPointsSaving(false);
     }
   };
 
@@ -298,6 +343,25 @@ function PokerRoom() {
           <p style={{ margin: '0 0 12px', color: '#fff', textShadow: '1px 1px 0 #000', position: 'relative', zIndex: 20 }}>
             {average ? <>Average: <strong>{average}</strong></> : 'No numeric votes'}
           </p>
+        )}
+
+        {/* Save winning points back to the loaded issue */}
+        {roomState.phase === 'revealed' && roomState.issue && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', position: 'relative', zIndex: 20 }}>
+            <TextInput
+              value={pointsInput}
+              onChange={(e: any) => {
+                setPointsInput(e.target.value);
+                setPointsSaved(false);
+                setPointsSaveError(null);
+              }}
+              onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
+              style={{ width: 70 }}
+            />
+            <Button onClick={savePoints} disabled={!pointsInput || pointsSaving}>💾</Button>
+            {pointsSaved && <span style={{ color: '#fff', textShadow: '1px 1px 0 #000' }}>Saved</span>}
+            {pointsSaveError && <span style={{ color: '#ff4444', fontSize: 12 }}>{pointsSaveError}</span>}
+          </div>
         )}
 
         {/* Round controls */}
