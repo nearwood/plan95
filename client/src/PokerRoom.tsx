@@ -3,7 +3,7 @@ import { WindowHeader, Button, Frame, WindowContent, TextInput } from 'react95';
 
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CardHand } from './CardHand';
 import { CardPile } from './CardPile';
 import { VoteDistribution } from './VoteDistribution';
@@ -12,31 +12,11 @@ import type { User } from './useAuth';
 import { AvatarStack } from './AvatarStack';
 import { SiteSelector } from './SiteSelector';
 import { MenuBar } from './MenuBar';
-import { CursorFollower } from './CursorFollower';
-import { ChipsCursorFollower, CHIP_CURSOR_IMAGES } from './ChipsCursorFollower';
 import { getDevUser } from './devUser';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
-import cursorCoffee from './assets/cursors/coffee.svg';
-import cursorWhiskey from './assets/cursors/whiskey_tumbler.svg';
-
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3218';
-
-// Each session's follower image is a random pick made once at load; duplicates
-// across users are fine, so there's nothing to coordinate server-side. Chip
-// colors are included individually so a session lands on one color, which
-// also tells us to render the trailing chip group instead of a single image.
-const CURSOR_IMAGES = [cursorCoffee, cursorWhiskey, ...CHIP_CURSOR_IMAGES];
-
-// Caps how often we broadcast our position (not how often we render our own
-// follower, which stays instant/local).
-const CURSOR_EMIT_INTERVAL_MS = 40;
-
-interface CursorPos {
-  x: number;
-  y: number;
-}
 
 interface JiraIssue {
   key: string;
@@ -51,28 +31,19 @@ interface RoomState {
 }
 
 interface UserData {
-  [socketId: string]: { name: string; picture: string | null; cursorImage?: string | null };
+  [socketId: string]: { name: string; picture: string | null };
 }
 
 function PokerRoom() {
   const { roomName } = useParams();
   const { user } = useOutletContext<{ user: User }>();
-  const [cursorImage] = useState(() => CURSOR_IMAGES[Math.floor(Math.random() * CURSOR_IMAGES.length)]);
-  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name, user.picture, cursorImage);
+  const { socket: roomSocket, roomId } = usePokerRoom(roomName || '', user.name, user.picture);
   const { connected } = useSocket();
   const [userData, setUserData] = useState<UserData>({});
   const [roomState, setRoomState] = useState<RoomState>({ phase: 'voting', votes: {}, issue: null });
   const [issueInput, setIssueInput] = useState('');
   const [issueError, setIssueError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
-  // Position is kept even while hidden (visible: false) so followers stay
-  // mounted at all times instead of unmounting/remounting their <img> on
-  // every on/off-table transition, which otherwise re-triggers image loads.
-  const [ownCursor, setOwnCursor] = useState<{ pos: CursorPos; visible: boolean }>({ pos: { x: 0.5, y: 0.5 }, visible: false });
-  const [remoteCursors, setRemoteCursors] = useState<Record<string, { pos: CursorPos; visible: boolean }>>({});
-  const lastCursorEmitRef = useRef(0);
-  const cursorHiddenRef = useRef(false);
-  const roundControlsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   const numUsers = Object.keys(userData).length;
@@ -106,79 +77,16 @@ function PokerRoom() {
     setDenied(true);
   }, []);
 
-  const handleCursorUpdate = useCallback((userId: string, pos: CursorPos | null) => {
-    setRemoteCursors(prev => {
-      if (!pos) {
-        if (!prev[userId]?.visible) return prev;
-        return { ...prev, [userId]: { pos: prev[userId].pos, visible: false } };
-      }
-      return { ...prev, [userId]: { pos, visible: true } };
-    });
-  }, []);
-
   useEffect(() => {
     roomSocket?.on('roomUpdate', handleRoomUpdate);
     roomSocket?.on('roomState', handleRoomState);
     roomSocket?.on('joinDenied', handleJoinDenied);
-    roomSocket?.on('cursorUpdate', handleCursorUpdate);
     return () => {
       roomSocket?.off('roomUpdate', handleRoomUpdate);
       roomSocket?.off('roomState', handleRoomState);
       roomSocket?.off('joinDenied', handleJoinDenied);
-      roomSocket?.off('cursorUpdate', handleCursorUpdate);
     };
-  }, [roomSocket, handleRoomUpdate, handleRoomState, handleJoinDenied, handleCursorUpdate]);
-
-  // A user can vanish (disconnect, tab close) without ever sending a final
-  // cursorMove(null), so prune any follower whose owner is no longer present.
-  useEffect(() => {
-    setRemoteCursors(prev => {
-      let changed = false;
-      const next: Record<string, { pos: CursorPos; visible: boolean }> = {};
-      for (const [userId, entry] of Object.entries(prev)) {
-        if (userData[userId]) {
-          next[userId] = entry;
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [userData]);
-
-  const handleTableMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Below the reveal/new-round button is the card-picking zone: hide the
-    // follower there so nobody can watch you home in on a card before you vote.
-    const controlsBottom = roundControlsRef.current?.getBoundingClientRect().bottom;
-    if (controlsBottom !== undefined && e.clientY >= controlsBottom) {
-      if (!cursorHiddenRef.current) {
-        cursorHiddenRef.current = true;
-        setOwnCursor(prev => ({ ...prev, visible: false }));
-        roomSocket?.emit('cursorMove', roomId, null);
-      }
-      return;
-    }
-    cursorHiddenRef.current = false;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pos = {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height,
-    };
-    setOwnCursor({ pos, visible: true });
-
-    const now = Date.now();
-    if (now - lastCursorEmitRef.current >= CURSOR_EMIT_INTERVAL_MS) {
-      lastCursorEmitRef.current = now;
-      roomSocket?.emit('cursorMove', roomId, pos);
-    }
-  }, [roomSocket, roomId]);
-
-  const handleTableMouseLeave = useCallback(() => {
-    cursorHiddenRef.current = false;
-    setOwnCursor(prev => ({ ...prev, visible: false }));
-    roomSocket?.emit('cursorMove', roomId, null);
-  }, [roomSocket, roomId]);
+  }, [roomSocket, handleRoomUpdate, handleRoomState, handleJoinDenied]);
 
   const castVote = (value: string) => {
     const newValue = myVote === value ? null : value;
@@ -262,21 +170,7 @@ function PokerRoom() {
       </div>
 
       {/* Bottom: Poker table */}
-      <div className='pokerBottom' onMouseMove={handleTableMouseMove} onMouseLeave={handleTableMouseLeave}>
-
-        {CHIP_CURSOR_IMAGES.includes(cursorImage)
-          ? <ChipsCursorFollower x={ownCursor.pos.x} y={ownCursor.pos.y} image={cursorImage} visible={ownCursor.visible} />
-          : <CursorFollower x={ownCursor.pos.x} y={ownCursor.pos.y} image={cursorImage} visible={ownCursor.visible} />}
-        {Object.entries(userData).map(([userId, data]) => {
-          const image = data.cursorImage;
-          if (!image) return null;
-          const entry = remoteCursors[userId];
-          const pos = entry?.pos ?? { x: 0.5, y: 0.5 };
-          const visible = entry?.visible ?? false;
-          return CHIP_CURSOR_IMAGES.includes(image)
-            ? <ChipsCursorFollower key={userId} x={pos.x} y={pos.y} image={image} visible={visible} />
-            : <CursorFollower key={userId} x={pos.x} y={pos.y} image={image} visible={visible} />;
-        })}
+      <div className='pokerBottom'>
 
         {/* Avatar stack */}
         <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-end', paddingRight: 10, position: 'relative', zIndex: 20 }}>
@@ -301,7 +195,7 @@ function PokerRoom() {
         )}
 
         {/* Round controls */}
-        <div ref={roundControlsRef} style={{ marginBottom: 12, position: 'relative', zIndex: 20 }}>
+        <div style={{ marginBottom: 12, position: 'relative', zIndex: 20 }}>
           {roomState.phase === 'voting'
             ? <Button onClick={revealVotes} disabled={votedCount === 0}>
                 Reveal ({votedCount}/{numUsers})
