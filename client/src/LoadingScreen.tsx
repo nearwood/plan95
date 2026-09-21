@@ -22,7 +22,7 @@ const MESSAGES = [
 ];
 
 const MAX_PROGRESS = 99;
-const FULL_DURATION_MS = 4 * 60 * 1000;
+const FULL_DURATION_MS = 60 * 1000;
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const pickMessage = (previous?: string) => {
@@ -35,14 +35,16 @@ function LoadingScreen() {
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState(() => pickMessage());
 
-  // Fake progress: a jittered, monotonic climb toward MAX_PROGRESS that only
-  // gets there after FULL_DURATION_MS, advancing at random intervals.
+  // Fake progress: a jittered, monotonic ease-out climb (fast at first, then
+  // slower and slower) that only reaches MAX_PROGRESS after FULL_DURATION_MS,
+  // advancing at random intervals.
   useEffect(() => {
     const start = Date.now();
     let timer: number;
     const tick = () => {
-      const target = MAX_PROGRESS * Math.min(1, (Date.now() - start) / FULL_DURATION_MS);
-      setProgress(prev => Math.max(prev, Math.min(MAX_PROGRESS, target * rand(0.7, 1.3))));
+      const elapsed = Math.min(1, (Date.now() - start) / FULL_DURATION_MS);
+      const target = MAX_PROGRESS * (1 - Math.pow(1 - elapsed, 3));
+      setProgress(prev => Math.max(prev, Math.min(MAX_PROGRESS, target * rand(0.9, 1.1))));
       timer = window.setTimeout(tick, rand(300, 2500));
     };
     timer = window.setTimeout(tick, rand(300, 1000));
@@ -64,8 +66,8 @@ function LoadingScreen() {
       <span><img src='/favicon.png' className='title-icon' alt='' />plan95</span>
     </WindowHeader>
     <WindowContent className='windowContent' style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-      <p>{message}</p>
       <ProgressBar value={Math.floor(progress)} style={{ width: 'min(320px, 100%)' }} />
+      <p>{message}</p>
     </WindowContent>
     <Frame variant='well' className='footer' />
   </>);
