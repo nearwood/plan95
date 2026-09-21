@@ -12,7 +12,7 @@ export interface RoomHookResponse {
   roomId: string;
 }
 
-export const useRoom = (name: string, username: string, picture?: string, cursorImage?: string): RoomHookResponse => {
+export const useRoom = (name: string, username: string, picture?: string): RoomHookResponse => {
   const { socket, rooms, updateRooms } = useSocket();
 
   const roomId = name;
@@ -25,7 +25,7 @@ export const useRoom = (name: string, username: string, picture?: string, cursor
     /** Rejoin rooms after a reconnection */
     const rejoinRooms = (): void => {
       Object.keys(rooms).forEach((roomName) => {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName, username, picture, cursorImage);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomName, username, picture);
       });
     };
 
@@ -33,7 +33,7 @@ export const useRoom = (name: string, username: string, picture?: string, cursor
     if (!rooms[roomId]) {
       rooms[roomId] = 1;
       if (socket.connected) {
-        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomId, username, picture, cursorImage);
+        socket.emit(WebsocketClientEvents.WS_JOINROOM, roomId, username, picture);
       }
       socket.on('connect', rejoinRooms);
     } else {
@@ -53,10 +53,10 @@ export const useRoom = (name: string, username: string, picture?: string, cursor
       }
       updateRooms(rooms);
     };
-  }, [name, roomId, rooms, socket, updateRooms, username, picture, cursorImage]);
+  }, [name, roomId, rooms, socket, updateRooms, username, picture]);
 
   return { socket, roomId };
 };
 
-export const usePokerRoom = (roomId: string, username: string, picture?: string, cursorImage?: string): RoomHookResponse =>
-  useRoom(roomId, username, picture, cursorImage);
+export const usePokerRoom = (roomId: string, username: string, picture?: string): RoomHookResponse =>
+  useRoom(roomId, username, picture);
