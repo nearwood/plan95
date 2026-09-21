@@ -163,7 +163,7 @@ fastify.get('/auth/login', async (req, reply) => {
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: ATLASSIAN_CLIENT_ID,
-    scope: 'read:me read:jira-work offline_access',
+    scope: 'read:me read:jira-work write:jira-work offline_access',
     redirect_uri: ATLASSIAN_REDIRECT_URI,
     state,
     response_type: 'code',
@@ -310,6 +310,10 @@ function getRoom(room) {
   return roomState[room];
 }
 
+// Matches "Story Points" (classic projects) and "Story point estimate"
+// (team-managed projects) - the two names Jira Cloud uses for this custom field.
+const isStoryPointsFieldName = (name) => /^story point/i.test(name);
+
 // Load a Jira issue into a room. This lives on HTTP (not the websocket) so it can
 // refresh the access token and re-set the session cookie on its way through; the
 // resulting issue is broadcast to the room over socket.io like any other update.
@@ -338,16 +342,21 @@ fastify.post('/issue', async (req, reply) => {
   }
 
   const res = await fetch(
-    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=summary,description`,
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}?fields=*navigable&expand=names`,
     { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
   );
   if (!res.ok) return reply.code(502).send({ error: `Could not load ${key}` });
 
   const data = await res.json();
+  // Story Points is a per-site custom field ("Story Points" on classic projects,
+  // "Story point estimate" on team-managed), so resolve its id from the field
+  // name map rather than hardcoding a customfield_XXXXX.
+  const storyPointsFieldId = Object.entries(data.names ?? {}).find(([, name]) => isStoryPointsFieldName(name))?.[0];
   const issue = {
     key: data.key,
     summary: data.fields.summary,
     description: data.fields.description ?? null,
+    storyPoints: storyPointsFieldId ? data.fields[storyPointsFieldId] ?? null : null,
   };
 
   roomOwners[room] = roomOwners[room] || cloudId;
@@ -355,6 +364,62 @@ fastify.post('/issue', async (req, reply) => {
   const state = getRoom(nsRoom);
   state.issue = issue;
   fastify.io.to(nsRoom).emit('roomState', state);
+  return reply.send({ ok: true });
+});
+
+// Save a round's winning point value back to the room's loaded issue. This is a
+// plain request/response (no roomState broadcast) since the result is local to
+// whoever clicked save, unlike loading an issue which is shared room state.
+fastify.post('/issue/points', async (req, reply) => {
+  const session = readSession(req);
+  if (!session) return reply.code(401).send({ error: 'Unauthenticated' });
+
+  const fresh = await ensureFreshToken(session);
+  if (!fresh) {
+    clearSession(reply);
+    return reply.code(401).send({ error: 'Session expired' });
+  }
+  if (fresh.changed) writeSession(reply, fresh.session);
+
+  const { room, points } = req.body ?? {};
+  if (typeof room !== 'string' || !Number.isFinite(points)) {
+    return reply.code(400).send({ error: 'Invalid request' });
+  }
+
+  const { token, cloudId } = fresh.session;
+  if (roomOwners[room] && roomOwners[room] !== cloudId) {
+    return reply.code(403).send({ error: "You don't have access to this room" });
+  }
+
+  const nsRoom = roomKey(cloudId, room);
+  const state = getRoom(nsRoom);
+  if (!state.issue) return reply.code(400).send({ error: 'No issue loaded' });
+  const { key } = state.issue;
+
+  // Resolve the Story Points field id from this issue's edit screen rather than
+  // hardcoding a customfield_XXXXX (see isStoryPointsFieldName).
+  const metaRes = await fetch(
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}/editmeta`,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } }
+  );
+  if (!metaRes.ok) return reply.code(502).send({ error: `Could not load edit metadata for ${key}` });
+  const meta = await metaRes.json();
+  const fieldId = Object.entries(meta.fields ?? {}).find(([, f]) => isStoryPointsFieldName(f.name))?.[0];
+  if (!fieldId) return reply.code(422).send({ error: `${key} has no Story Points field on its edit screen` });
+
+  const putRes = await fetch(
+    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${key}`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { [fieldId]: points } }),
+    }
+  );
+  if (putRes.status === 403) {
+    return reply.code(403).send({ error: 'No permission to edit this issue — try reconnecting your Jira account' });
+  }
+  if (!putRes.ok) return reply.code(502).send({ error: `Could not save points to ${key}` });
+
   return reply.send({ ok: true });
 });
 

@@ -3,7 +3,7 @@ import { WindowHeader, Button, Frame, WindowContent, TextInput } from 'react95';
 
 import { usePokerRoom } from './useRoom';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CardHand } from './CardHand';
 import { CardPile } from './CardPile';
 import { VoteDistribution } from './VoteDistribution';
@@ -13,6 +13,7 @@ import { AvatarStack } from './AvatarStack';
 import { SiteSelector } from './SiteSelector';
 import { MenuBar } from './MenuBar';
 import { getDevUser } from './devUser';
+import { nearestCardValue } from './pokerValues';
 import Markdown from 'react-markdown';
 import { convert as adfToMd } from 'adf-to-md';
 
@@ -22,6 +23,7 @@ interface JiraIssue {
   key: string;
   summary: string;
   description: object | null;
+  storyPoints: number | null;
 }
 
 interface RoomState {
@@ -44,6 +46,10 @@ function PokerRoom() {
   const [issueInput, setIssueInput] = useState('');
   const [issueError, setIssueError] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
+  const [pointsInput, setPointsInput] = useState('');
+  const [pointsSaving, setPointsSaving] = useState(false);
+  const [pointsSaveError, setPointsSaveError] = useState<string | null>(null);
+  const [pointsSaved, setPointsSaved] = useState(false);
   const navigate = useNavigate();
 
   const numUsers = Object.keys(userData).length;
@@ -88,6 +94,25 @@ function PokerRoom() {
     };
   }, [roomSocket, handleRoomUpdate, handleRoomState, handleJoinDenied]);
 
+  // Pre-fill the points box: with the issue's existing Story Points when a new
+  // issue loads, with the nearest deck value to the average once a round
+  // reveals, or blank once voting resumes (New Round).
+  const prevIssueKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const issueKey = roomState.issue?.key ?? null;
+    if (issueKey !== prevIssueKeyRef.current) {
+      prevIssueKeyRef.current = issueKey;
+      setPointsInput(roomState.issue?.storyPoints != null ? String(roomState.issue.storyPoints) : '');
+    } else if (roomState.phase === 'revealed') {
+      setPointsInput(average ? nearestCardValue(Number(average)) : '');
+    } else {
+      setPointsInput('');
+    }
+    setPointsSaveError(null);
+    setPointsSaved(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomState.phase, roomState.issue?.key]);
+
   const castVote = (value: string) => {
     const newValue = myVote === value ? null : value;
     roomSocket?.emit('castVote', roomId, newValue);
@@ -112,6 +137,32 @@ function PokerRoom() {
       // On success the new issue arrives via the roomState socket broadcast.
     } catch {
       setIssueError('Could not load issue');
+    }
+  };
+
+  const savePoints = async () => {
+    const points = Number(pointsInput.trim());
+    if (!Number.isFinite(points)) return;
+    setPointsSaving(true);
+    setPointsSaveError(null);
+    setPointsSaved(false);
+    try {
+      const res = await fetch(`${SERVER_URL}/issue/points`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room: roomId, points }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPointsSaveError(data.error || 'Could not save points');
+      } else {
+        setPointsSaved(true);
+      }
+    } catch {
+      setPointsSaveError('Could not save points');
+    } finally {
+      setPointsSaving(false);
     }
   };
 
@@ -155,6 +206,18 @@ function PokerRoom() {
             style={{ flex: 1 }}
           />
           <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
+          <TextInput
+            value={pointsInput}
+            onChange={(e: any) => {
+              setPointsInput(e.target.value);
+              setPointsSaved(false);
+              setPointsSaveError(null);
+            }}
+            onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
+            disabled={!roomState.issue}
+            style={{ width: 70 }}
+          />
+          <Button onClick={savePoints} disabled={!roomState.issue || !pointsInput || pointsSaving}>💾</Button>
         </div>
         {roomState.issue && (
           <div>
@@ -167,6 +230,8 @@ function PokerRoom() {
           </div>
         )}
         {issueError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{issueError}</p>}
+        {pointsSaveError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{pointsSaveError}</p>}
+        {pointsSaved && <p style={{ margin: '4px 0 0', fontSize: 12 }}>Saved</p>}
       </div>
 
       {/* Bottom: Poker table */}
