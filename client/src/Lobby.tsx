@@ -1,40 +1,26 @@
-import { useNavigate, useOutletContext } from 'react-router-dom';
-import { WindowHeader, Button, Frame, WindowContent } from 'react95';
+import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { adjectives, animals, colors, uniqueNamesGenerator } from 'unique-names-generator';
-import { useSocket } from './socketContext';
-import type { User } from './useAuth';
-import { SiteSelector } from './SiteSelector';
-import { MenuBar } from './MenuBar';
+import LoadingScreen from './LoadingScreen';
 
+// The root URL has no UI of its own: once auth has resolved (App only renders
+// this route then), drop the user into a freshly named room.
 function Lobby() {
   const navigate = useNavigate();
-  const { connected } = useSocket();
-  const { user } = useOutletContext<{ user: User }>();
+  const started = useRef(false);
 
-  function createRoom() {
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     const roomName = uniqueNamesGenerator({
       dictionaries: [adjectives, colors, animals],
       separator: '-',
     });
-    navigate(`/poker/${roomName}`);
-  }
+    // replace so Back doesn't return to "/" and bounce straight into another room
+    navigate(`/poker/${roomName}`, { replace: true });
+  }, [navigate]);
 
-  return (<>
-    <WindowHeader className='window-title'>
-      <span><img src='/favicon.png' className='title-icon' alt='' />Planning Poker - plan95</span>
-    </WindowHeader>
-    <MenuBar inLobby />
-    <WindowContent className='windowContent'>
-      <Button onClick={createRoom}>Create Room</Button>
-    </WindowContent>
-    <Frame variant='well' className='footer'>
-      {!connected && <span>Connecting...</span>}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <SiteSelector />
-        <span>{user.name}</span>
-      </div>
-    </Frame>
-  </>);
+  return <LoadingScreen />;
 }
 
 export default Lobby;

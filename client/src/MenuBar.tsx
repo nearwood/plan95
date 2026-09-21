@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Toolbar, Button, MenuList, MenuListItem, Separator } from 'react95';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { Toolbar, Button, MenuList, MenuListItem } from 'react95';
+import { useOutletContext } from 'react-router-dom';
 import type { User } from './useAuth';
 
 const ISSUES_URL = 'https://github.com/nearwood/plan95/issues';
@@ -9,9 +9,8 @@ type Menu = 'file' | 'room' | 'help';
 
 const menuListStyle = { position: 'absolute', top: 24, zIndex: 9999 } as const;
 
-export function MenuBar({ inLobby = false }: { inLobby?: boolean }) {
+export function MenuBar() {
   const { logout } = useOutletContext<{ user: User; logout: () => void }>();
-  const navigate = useNavigate();
   const [openMenu, setOpenMenu] = useState<Menu | null>(null);
   // Points at the currently-open menu's button (which contains its dropdown).
   const openRef = useRef<HTMLButtonElement>(null);
@@ -49,20 +48,14 @@ export function MenuBar({ inLobby = false }: { inLobby?: boolean }) {
         )}
       </Button>
       <Button variant='menu' size='sm' disabled>Edit</Button>
-      {inLobby ? (
-        <Button variant='menu' size='sm' disabled>Room</Button>
-      ) : (
-        <Button variant='menu' size='sm' ref={openMenu === 'room' ? openRef : undefined} onClick={() => toggle('room')}>
-          Room
-          {openMenu === 'room' && (
-            <MenuList style={menuListStyle} onClick={close}>
-              <MenuListItem size='sm' onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy URL</MenuListItem>
-              <Separator />
-              <MenuListItem size='sm' onClick={() => navigate('/')}>Return To Lobby</MenuListItem>
-            </MenuList>
-          )}
-        </Button>
-      )}
+      <Button variant='menu' size='sm' ref={openMenu === 'room' ? openRef : undefined} onClick={() => toggle('room')}>
+        Room
+        {openMenu === 'room' && (
+          <MenuList style={menuListStyle} onClick={close}>
+            <MenuListItem size='sm' onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy URL</MenuListItem>
+          </MenuList>
+        )}
+      </Button>
       <Button variant='menu' size='sm' ref={openMenu === 'help' ? openRef : undefined} onClick={() => toggle('help')}>
         Help
         {openMenu === 'help' && (

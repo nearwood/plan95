@@ -9,6 +9,7 @@ import ms_sans_serif_bold from 'react95/dist/fonts/ms_sans_serif_bold.woff2';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from './useAuth';
 import LoginScreen from './LoginScreen';
+import LoadingScreen from './LoadingScreen';
 
 const GlobalStyles = createGlobalStyle`
   ${styleReset}
@@ -50,7 +51,7 @@ function App() {
       <ThemeProvider theme={original}>
         <Window className='window'>
           {loading
-            ? null
+            ? <LoadingScreen />
             : user
               ? <Outlet context={{ user, logout, switchSite }} />
               : <LoginScreen onLogin={login} authError={authError} />
