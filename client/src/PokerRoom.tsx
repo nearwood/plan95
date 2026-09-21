@@ -141,11 +141,16 @@ function PokerRoom() {
   };
 
   const savePoints = async () => {
-    const points = Number(pointsInput.trim());
-    if (!Number.isFinite(points)) return;
-    setPointsSaving(true);
+    const trimmed = pointsInput.trim();
+    // An empty box clears the field in Jira.
+    const points = trimmed === '' ? null : Number(trimmed);
     setPointsSaveError(null);
     setPointsSaved(false);
+    if (points !== null && !Number.isFinite(points)) {
+      setPointsSaveError('Points must be a number');
+      return;
+    }
+    setPointsSaving(true);
     try {
       const res = await fetch(`${SERVER_URL}/issue/points`, {
         method: 'POST',
@@ -206,18 +211,26 @@ function PokerRoom() {
             style={{ flex: 1 }}
           />
           <Button onClick={loadIssue} disabled={!issueInput}>Load</Button>
-          <TextInput
-            value={pointsInput}
-            onChange={(e: any) => {
-              setPointsInput(e.target.value);
-              setPointsSaved(false);
-              setPointsSaveError(null);
-            }}
-            onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
-            disabled={!roomState.issue}
-            style={{ width: 70 }}
-          />
-          <Button onClick={savePoints} disabled={!roomState.issue || !pointsInput || pointsSaving}>💾</Button>
+          <div style={{ position: 'relative', width: 70 }}>
+            <TextInput
+              value={pointsInput}
+              onChange={(e: any) => {
+                setPointsInput(e.target.value);
+                setPointsSaved(false);
+                setPointsSaveError(null);
+              }}
+              onKeyDown={(e: any) => e.key === 'Enter' && savePoints()}
+              disabled={!roomState.issue}
+              style={{ width: '100%', paddingRight: 22 }}
+            />
+            {(pointsSaved || pointsSaveError) && (
+              <span
+                title={pointsSaveError ?? 'Saved'}
+                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >{pointsSaveError ? '❌' : '✅'}</span>
+            )}
+          </div>
+          <Button onClick={savePoints} disabled={!roomState.issue || pointsSaving}>💾</Button>
         </div>
         {roomState.issue && (
           <div>
@@ -230,8 +243,6 @@ function PokerRoom() {
           </div>
         )}
         {issueError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{issueError}</p>}
-        {pointsSaveError && <p style={{ color: '#ff4444', margin: '4px 0 0', fontSize: 12 }}>{pointsSaveError}</p>}
-        {pointsSaved && <p style={{ margin: '4px 0 0', fontSize: 12 }}>Saved</p>}
       </div>
 
       {/* Bottom: Poker table */}
@@ -280,6 +291,7 @@ function PokerRoom() {
         ? <><span>Users: {numUsers}</span>{roomState.phase === 'voting' && numUsers > 0 && votedCount === numUsers && <span> · All voted!</span>}</>
         : <span>Connecting...</span>
       }
+      {pointsSaveError && <span style={{ color: '#ff4444', marginLeft: 8 }}>{pointsSaveError}</span>}
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
         <SiteSelector />
         <span>{user.name}</span>

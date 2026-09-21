@@ -382,7 +382,7 @@ fastify.post('/issue/points', async (req, reply) => {
   if (fresh.changed) writeSession(reply, fresh.session);
 
   const { room, points } = req.body ?? {};
-  if (typeof room !== 'string' || !Number.isFinite(points)) {
+  if (typeof room !== 'string' || (points !== null && !Number.isFinite(points))) {
     return reply.code(400).send({ error: 'Invalid request' });
   }
 
